@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
@@ -69,12 +70,17 @@ export default function Home() {
       ) : (
         <ul className="space-y-2">
           {sessions.map((session) => (
-            <li key={session.id} className="border rounded p-3">
-              <p>Type: {session.interview_type}</p>
-              <p>Status: {session.status}</p>
-              <p className="text-sm text-gray-500">
-                Created: {new Date(session.created_at).toLocaleString()}
-              </p>
+            <li key={session.id}>
+              <Link
+                href={`/interview/${session.id}`}
+                className="block border rounded p-3 hover:bg-gray-50 cursor-pointer"
+              >
+                <p>Type: {session.interview_type}</p>
+                <p>Status: {session.status}</p>
+                <p className="text-sm text-gray-500">
+                  Created: {new Date(session.created_at).toLocaleString()}
+                </p>
+              </Link>
             </li>
           ))}
         </ul>
