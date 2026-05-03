@@ -44,7 +44,25 @@ export default async function Page({
           {new Date(session.created_at).toLocaleString()}
         </li>
       </ul>
+      <section className="mt-8 rounded border p-4">
+        <h2 className="mb-2 text-xl font-semibold">Question 1</h2>
 
+        <p className="mb-4">
+          Tell me about a technical challenge you faced and how you solved it.
+        </p>
+
+        <textarea
+          className="min-h-32 w-full rounded border p-3"
+          placeholder="Type your answer here..."
+        />
+
+        <button
+          type="button"
+          className="mt-4 rounded bg-black px-4 py-2 text-white hover:bg-gray-800"
+        >
+          Submit Answer
+        </button>
+      </section>
       <Link href="/" className="text-blue-600 underline">
         Back to sessions
       </Link>
