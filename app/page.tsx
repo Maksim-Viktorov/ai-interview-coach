@@ -35,18 +35,21 @@ export default function Home() {
   }, []);
 
   const createSession = async () => {
-    const { data, error } = await supabase
-      .from('interview_sessions')
-      .insert([{ interview_type: 'coding' }])
-      .select()
-      .single();
+    const res = await fetch('/api/sessions', { method: 'POST' });
+    const result = (await res.json()) as {
+      session?: InterviewSession;
+      error?: string;
+    };
 
-    if (error) {
-      console.error('Error creating session:', error);
+    if (!res.ok) {
+      console.error('Error creating session:', result.error);
       return;
     }
 
-    setSessions((prev) => [data, ...prev]);
+    const session = result.session;
+    if (session) {
+      setSessions((prev) => [session, ...prev]);
+    }
   };
 
   if (loading) return <main className="p-8">Loading...</main>;
