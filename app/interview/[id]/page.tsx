@@ -48,7 +48,7 @@ export default async function Page({
           {new Date(session.created_at).toLocaleString()}
         </li>
       </ul>
-      <AnswerForm question={question} />
+      <AnswerForm sessionId={session.id} question={question} />
       <Link href="/" className="text-blue-600 underline">
         Back to sessions
       </Link>
