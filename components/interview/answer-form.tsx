@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type AnswerFormProps = {
   sessionId: string;
@@ -25,6 +25,63 @@ export function AnswerForm({
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  useEffect(() => {
+    return () => {
+      const rec = mediaRecorderRef.current;
+      if (rec) {
+        if (rec.state !== 'inactive') {
+          rec.stop();
+        }
+        rec.stream?.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
+
+  const startRecording = async () => {
+    try {
+      setAudioBlob(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunksRef.current = [];
+
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, {
+          type: recorder.mimeType || 'audio/webm',
+        });
+        setAudioBlob(blob);
+        console.log(blob);
+        stream.getTracks().forEach((t) => t.stop());
+        mediaRecorderRef.current = null;
+      };
+
+      recorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+    setIsRecording(false);
+  };
 
   const handleSubmit = async () => {
     setFeedback(null);
@@ -78,6 +135,29 @@ export function AnswerForm({
       </h2>
 
       <p className="mb-4">{question}</p>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {!isRecording ? (
+          <button
+            type="button"
+            className="rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-600"
+            onClick={() => void startRecording()}
+          >
+            Start Recording
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="rounded bg-red-700 px-3 py-2 text-sm text-white hover:bg-red-600"
+            onClick={stopRecording}
+          >
+            Stop Recording
+          </button>
+        )}
+        {audioBlob ? (
+          <span className="text-sm text-green-700">Audio recorded</span>
+        ) : null}
+      </div>
 
       <textarea
         className="min-h-32 w-full rounded border p-3"
