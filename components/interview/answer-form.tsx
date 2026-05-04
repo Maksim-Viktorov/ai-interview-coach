@@ -15,6 +15,13 @@ type FeedbackState = {
   suggestion: string;
 };
 
+type TranscribeMetrics = {
+  wordCount: number;
+  durationSeconds: number;
+  wordsPerMinute: number;
+  paceFeedback: string;
+};
+
 export function AnswerForm({
   sessionId,
   question,
@@ -29,6 +36,7 @@ export function AnswerForm({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  const [metrics, setMetrics] = useState<TranscribeMetrics | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -59,6 +67,7 @@ export function AnswerForm({
       revokeAudioObjectUrl();
       setAudioUrl(null);
       setAudioBlob(null);
+      setMetrics(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
 
@@ -107,6 +116,7 @@ export function AnswerForm({
 
     setTranscribing(true);
     setErrorMessage(null);
+    setMetrics(null);
 
     try {
       const formData = new FormData();
@@ -117,7 +127,11 @@ export function AnswerForm({
         body: formData,
       });
 
-      const data = (await res.json()) as { text?: string; error?: string };
+      const data = (await res.json()) as {
+        text?: string;
+        error?: string;
+        metrics?: TranscribeMetrics;
+      };
 
       if (!res.ok) {
         setErrorMessage(data.error ?? 'Transcription failed');
@@ -127,6 +141,7 @@ export function AnswerForm({
       if (data.text !== undefined) {
         setAnswer(data.text);
       }
+      setMetrics(data.metrics ?? null);
     } catch {
       setErrorMessage('Transcription failed');
     } finally {
@@ -173,6 +188,7 @@ export function AnswerForm({
       setErrorMessage(null);
       setFeedback(result.feedback ?? null);
       setAnswer('');
+      setMetrics(null);
       onSubmitted?.();
     } finally {
       setSubmitting(false);
@@ -230,6 +246,15 @@ export function AnswerForm({
         value={answer}
         onChange={(e) => setAnswer(e.target.value)}
       />
+
+      {metrics ? (
+        <div className="mt-4 text-sm text-gray-700">
+          <p>Words: {metrics.wordCount}</p>
+          <p>Duration: {Math.round(metrics.durationSeconds)}s</p>
+          <p>WPM: {metrics.wordsPerMinute}</p>
+          <p>{metrics.paceFeedback}</p>
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <p className="mt-2 text-sm text-red-600" role="alert">
