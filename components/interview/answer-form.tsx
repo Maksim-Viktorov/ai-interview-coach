@@ -20,6 +20,8 @@ type TranscribeMetrics = {
   durationSeconds: number;
   wordsPerMinute: number;
   paceFeedback: string;
+  fillerCount: number;
+  fillerFeedback: string;
 };
 
 export function AnswerForm({
@@ -270,6 +272,8 @@ export function AnswerForm({
           <p>Duration: {Math.round(metrics.durationSeconds)}s</p>
           <p>WPM: {metrics.wordsPerMinute}</p>
           <p>{metrics.paceFeedback}</p>
+          <p>Fillers: {metrics.fillerCount}</p>
+          <p>{metrics.fillerFeedback}</p>
         </div>
       ) : null}
 
