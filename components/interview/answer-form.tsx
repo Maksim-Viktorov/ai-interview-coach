@@ -37,6 +37,9 @@ export function AnswerForm({
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [metrics, setMetrics] = useState<TranscribeMetrics | null>(null);
+  const [audioDurationSeconds, setAudioDurationSeconds] = useState<
+    number | null
+  >(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -68,6 +71,7 @@ export function AnswerForm({
       setAudioUrl(null);
       setAudioBlob(null);
       setMetrics(null);
+      setAudioDurationSeconds(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
 
@@ -89,6 +93,13 @@ export function AnswerForm({
         audioUrlRef.current = url;
         setAudioUrl(url);
         setAudioBlob(blob);
+        setAudioDurationSeconds(null);
+        const audio = new Audio(url);
+        audio.addEventListener('loadedmetadata', () => {
+          if (Number.isFinite(audio.duration)) {
+            setAudioDurationSeconds(audio.duration);
+          }
+        });
         console.log(blob);
         stream.getTracks().forEach((t) => t.stop());
         mediaRecorderRef.current = null;
@@ -121,6 +132,12 @@ export function AnswerForm({
     try {
       const formData = new FormData();
       formData.append('file', audioBlob, 'recording.webm');
+      if (
+        audioDurationSeconds !== null &&
+        Number.isFinite(audioDurationSeconds)
+      ) {
+        formData.append('durationSeconds', String(audioDurationSeconds));
+      }
 
       const res = await fetch('/api/transcribe', {
         method: 'POST',

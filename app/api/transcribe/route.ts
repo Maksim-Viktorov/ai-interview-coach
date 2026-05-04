@@ -18,7 +18,17 @@ export async function POST(request: Request) {
 
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
 
-  const durationSeconds = file.size / 16000;
+  const durationSecondsRaw = formData.get('durationSeconds');
+  const providedDurationSeconds =
+    typeof durationSecondsRaw === 'string'
+      ? Number(durationSecondsRaw)
+      : null;
+
+  const durationSeconds =
+    providedDurationSeconds &&
+    Number.isFinite(providedDurationSeconds)
+      ? providedDurationSeconds
+      : file.size / 16000;
 
   const wordsPerMinute =
     durationSeconds > 0
