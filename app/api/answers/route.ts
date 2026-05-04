@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { openai } from '@/lib/openai';
 import { supabaseServer } from '@/lib/supabase-server';
 
 type AnswersRequestBody = {
@@ -17,18 +18,29 @@ export async function POST(request: Request) {
     );
   }
 
-  const wordCount = body.answer.trim().split(/\s+/).length;
-
   let feedback: string;
-  if (wordCount < 30) {
+  try {
+    const response = await openai.responses.create({
+      model: 'gpt-5.4-mini',
+      input: `You are an interview coach. Give concise feedback on this behavioral interview answer.
+
+Question:
+${body.question}
+
+Answer:
+${body.answer}
+
+Feedback should include:
+- one strength
+- one improvement
+- one concrete suggestion
+
+Keep it under 120 words.`,
+    });
+    feedback = response.output_text;
+  } catch {
     feedback =
-      'Your answer is quite short. Try giving more context, explaining the challenge, your actions, and the final result.';
-  } else if (wordCount > 200) {
-    feedback =
-      'Your answer is detailed, but may be too long for an interview. Try making it more concise and structured.';
-  } else {
-    feedback =
-      'Good answer length. Next, try making sure you clearly explain the situation, your actions, and the result.';
+      'Feedback could not be generated, but your answer was saved.';
   }
 
   const { data, error } = await supabaseServer
