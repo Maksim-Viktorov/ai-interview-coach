@@ -38,6 +38,9 @@ export function AnswerForm({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(
+    null,
+  );
   const [metrics, setMetrics] = useState<TranscribeMetrics | null>(null);
   const [audioDurationSeconds, setAudioDurationSeconds] = useState<
     number | null
@@ -74,6 +77,7 @@ export function AnswerForm({
       setAudioBlob(null);
       setMetrics(null);
       setAudioDurationSeconds(null);
+      setTranscriptionError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
 
@@ -124,11 +128,12 @@ export function AnswerForm({
 
   const handleTranscribe = async () => {
     if (!audioBlob) {
+      setTranscriptionError('Record audio before transcribing.');
       return;
     }
 
     setTranscribing(true);
-    setErrorMessage(null);
+    setTranscriptionError(null);
     setMetrics(null);
 
     try {
@@ -153,7 +158,7 @@ export function AnswerForm({
       };
 
       if (!res.ok) {
-        setErrorMessage(data.error ?? 'Transcription failed');
+        setTranscriptionError(data.error ?? 'Transcription failed');
         return;
       }
 
@@ -161,8 +166,9 @@ export function AnswerForm({
         setAnswer(data.text);
       }
       setMetrics(data.metrics ?? null);
+      setTranscriptionError(null);
     } catch {
-      setErrorMessage('Transcription failed');
+      setTranscriptionError('Transcription failed');
     } finally {
       setTranscribing(false);
     }
@@ -226,7 +232,7 @@ export function AnswerForm({
         {!isRecording ? (
           <button
             type="button"
-            className="rounded bg-gray-700 px-3 py-2 text-sm text-white hover:bg-gray-600"
+            className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => void startRecording()}
           >
             Start Recording
@@ -234,7 +240,7 @@ export function AnswerForm({
         ) : (
           <button
             type="button"
-            className="rounded bg-red-700 px-3 py-2 text-sm text-white hover:bg-red-600"
+            className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={stopRecording}
           >
             Stop Recording
@@ -243,17 +249,21 @@ export function AnswerForm({
         {audioBlob ? (
           <span className="text-sm text-green-700">Audio recorded</span>
         ) : null}
-        {audioBlob ? (
-          <button
-            type="button"
-            className="rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-            disabled={transcribing}
-            onClick={() => void handleTranscribe()}
-          >
-            Transcribe Recording
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!audioBlob || transcribing}
+          onClick={() => void handleTranscribe()}
+        >
+          {transcribing ? 'Transcribing...' : 'Transcribe Recording'}
+        </button>
       </div>
+
+      {transcriptionError ? (
+        <p className="mb-2 text-sm text-red-600" role="alert">
+          {transcriptionError}
+        </p>
+      ) : null}
 
       {audioUrl ? (
         <audio controls src={audioUrl} className="mt-2 w-full" />
@@ -305,7 +315,7 @@ export function AnswerForm({
 
       <button
         type="button"
-        className="mt-4 rounded bg-black px-4 py-2 text-white hover:bg-gray-800 disabled:opacity-50"
+        className="mt-4 rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={submitting}
         onClick={() => void handleSubmit()}
       >

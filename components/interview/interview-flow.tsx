@@ -52,7 +52,7 @@ export function InterviewFlow({ sessionId, questions }: InterviewFlowProps) {
 
       <button
         type="button"
-        className="rounded bg-gray-200 px-4 py-2 font-medium hover:bg-gray-300 disabled:pointer-events-none disabled:opacity-40"
+        className="mt-4 rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={!submittedCurrentQuestion}
         onClick={handleNext}
       >

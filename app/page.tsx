@@ -62,7 +62,7 @@ export default function Home() {
 
       <button
         type="button"
-        className="mb-4 rounded bg-black px-4 py-2 text-white hover:bg-gray-800"
+        className="mb-4 rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
         onClick={() => void createSession()}
       >
         Start New Interview

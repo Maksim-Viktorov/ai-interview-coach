@@ -25,7 +25,10 @@ export default async function Page({
     return (
       <main className="p-8">
         <p className="mb-4">Session not found</p>
-        <Link href="/" className="text-blue-600 underline">
+        <Link
+          href="/"
+          className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
+        >
           Back to sessions
         </Link>
       </main>
@@ -52,7 +55,10 @@ export default async function Page({
         </li>
       </ul>
       <InterviewFlow sessionId={session.id} questions={questions} />
-      <Link href="/" className="text-blue-600 underline">
+      <Link
+        href="/"
+        className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
+      >
         Back to sessions
       </Link>
     </main>
