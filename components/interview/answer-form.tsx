@@ -6,6 +6,7 @@ type AnswerFormProps = {
   sessionId: string;
   question: string;
   questionNumber: number;
+  onSubmitted?: () => void;
 };
 
 type FeedbackState = {
@@ -18,6 +19,7 @@ export function AnswerForm({
   sessionId,
   question,
   questionNumber,
+  onSubmitted,
 }: AnswerFormProps) {
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -63,6 +65,7 @@ export function AnswerForm({
       setErrorMessage(null);
       setFeedback(result.feedback ?? null);
       setAnswer('');
+      onSubmitted?.();
     } finally {
       setSubmitting(false);
     }

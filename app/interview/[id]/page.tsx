@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { AnswerForm } from '@/components/interview/answer-form';
+import { InterviewFlow } from '@/components/interview/interview-flow';
 import { supabaseServer } from '@/lib/supabase-server';
 
 const questions = [
@@ -51,16 +51,7 @@ export default async function Page({
           {new Date(session.created_at).toLocaleString()}
         </li>
       </ul>
-      <div className="space-y-6">
-        {questions.map((question, index) => (
-          <AnswerForm
-            key={question}
-            sessionId={session.id}
-            question={question}
-            questionNumber={index + 1}
-          />
-        ))}
-      </div>
+      <InterviewFlow sessionId={session.id} questions={questions} />
       <Link href="/" className="text-blue-600 underline">
         Back to sessions
       </Link>
