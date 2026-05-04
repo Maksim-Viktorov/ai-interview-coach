@@ -5,6 +5,7 @@ import { useState } from 'react';
 type AnswerFormProps = {
   sessionId: string;
   question: string;
+  questionNumber: number;
 };
 
 type FeedbackState = {
@@ -13,7 +14,11 @@ type FeedbackState = {
   suggestion: string;
 };
 
-export function AnswerForm({ sessionId, question }: AnswerFormProps) {
+export function AnswerForm({
+  sessionId,
+  question,
+  questionNumber,
+}: AnswerFormProps) {
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -64,8 +69,10 @@ export function AnswerForm({ sessionId, question }: AnswerFormProps) {
   };
 
   return (
-    <section className="mt-8 rounded border p-4">
-      <h2 className="mb-2 text-xl font-semibold">Question 1</h2>
+    <section className="rounded border p-4">
+      <h2 className="mb-2 text-xl font-semibold">
+        Question {questionNumber}
+      </h2>
 
       <p className="mb-4">{question}</p>
 

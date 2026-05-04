@@ -2,8 +2,11 @@ import Link from 'next/link';
 import { AnswerForm } from '@/components/interview/answer-form';
 import { supabaseServer } from '@/lib/supabase-server';
 
-const question =
-  'Tell me about a technical challenge you faced and how you solved it.';
+const questions = [
+  'Tell me about a technical challenge you faced and how you solved it.',
+  'Describe a time you had to debug a difficult problem. What was your process?',
+  'Tell me about a time you disagreed with a teammate. How did you handle it?',
+];
 
 export default async function Page({
   params,
@@ -48,7 +51,16 @@ export default async function Page({
           {new Date(session.created_at).toLocaleString()}
         </li>
       </ul>
-      <AnswerForm sessionId={session.id} question={question} />
+      <div className="space-y-6">
+        {questions.map((question, index) => (
+          <AnswerForm
+            key={question}
+            sessionId={session.id}
+            question={question}
+            questionNumber={index + 1}
+          />
+        ))}
+      </div>
       <Link href="/" className="text-blue-600 underline">
         Back to sessions
       </Link>
