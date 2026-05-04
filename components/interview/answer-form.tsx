@@ -35,15 +35,18 @@ export function AnswerForm({ sessionId, question }: AnswerFormProps) {
         }),
       });
 
-      const body = (await res.json()) as { error?: string };
+      const result = (await res.json()) as {
+        error?: string;
+        feedback?: string;
+      };
 
       if (!res.ok) {
-        setErrorMessage(body.error ?? 'Something went wrong');
+        setErrorMessage(result.error ?? 'Something went wrong');
         return;
       }
 
       setErrorMessage(null);
-      setSuccessMessage('Answer saved');
+      setSuccessMessage(result.feedback ?? 'Answer saved');
       setAnswer('');
     } finally {
       setSubmitting(false);
