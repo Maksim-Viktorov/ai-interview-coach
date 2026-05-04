@@ -7,14 +7,20 @@ type AnswerFormProps = {
   question: string;
 };
 
+type FeedbackState = {
+  strength: string;
+  improvement: string;
+  suggestion: string;
+};
+
 export function AnswerForm({ sessionId, question }: AnswerFormProps) {
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
 
   const handleSubmit = async () => {
-    setSuccessMessage(null);
+    setFeedback(null);
 
     if (!answer.trim()) {
       setErrorMessage('Please enter an answer.');
@@ -37,7 +43,11 @@ export function AnswerForm({ sessionId, question }: AnswerFormProps) {
 
       const result = (await res.json()) as {
         error?: string;
-        feedback?: string;
+        feedback?: {
+          strength: string;
+          improvement: string;
+          suggestion: string;
+        };
       };
 
       if (!res.ok) {
@@ -46,7 +56,7 @@ export function AnswerForm({ sessionId, question }: AnswerFormProps) {
       }
 
       setErrorMessage(null);
-      setSuccessMessage(result.feedback ?? 'Answer saved');
+      setFeedback(result.feedback ?? null);
       setAnswer('');
     } finally {
       setSubmitting(false);
@@ -72,10 +82,24 @@ export function AnswerForm({ sessionId, question }: AnswerFormProps) {
         </p>
       ) : null}
 
-      {successMessage ? (
-        <p className="mt-2 text-sm text-green-700" role="status">
-          {successMessage}
-        </p>
+      {feedback ? (
+        <div
+          className="mt-4 space-y-3 rounded border border-green-200 bg-green-50/80 p-4 text-sm"
+          role="status"
+        >
+          <div>
+            <p className="font-semibold text-gray-900">Strength</p>
+            <p className="text-gray-800">{feedback.strength}</p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Improvement</p>
+            <p className="text-gray-800">{feedback.improvement}</p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Suggestion</p>
+            <p className="text-gray-800">{feedback.suggestion}</p>
+          </div>
+        </div>
       ) : null}
 
       <button

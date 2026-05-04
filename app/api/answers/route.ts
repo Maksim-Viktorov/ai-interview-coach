@@ -8,6 +8,25 @@ type AnswersRequestBody = {
   answer?: string;
 };
 
+const FEEDBACK_PARSE_FALLBACK = {
+  strength: 'Could not parse feedback',
+  improvement: '',
+  suggestion: '',
+};
+
+const OPENAI_FAIL_FALLBACK = {
+  strength:
+    'Feedback could not be generated, but your answer was saved.',
+  improvement: '',
+  suggestion: '',
+};
+
+type ParsedFeedback = {
+  strength: string;
+  improvement: string;
+  suggestion: string;
+};
+
 export async function POST(request: Request) {
   const body = (await request.json()) as AnswersRequestBody;
 
@@ -18,11 +37,18 @@ export async function POST(request: Request) {
     );
   }
 
-  let feedback: string;
+  let parsed: ParsedFeedback;
+
   try {
     const response = await openai.responses.create({
       model: 'gpt-5.4-mini',
-      input: `You are an interview coach. Give concise feedback on this behavioral interview answer.
+      input: `You are an interview coach. Analyze this answer and return JSON in this exact format:
+
+{
+  "strength": string,
+  "improvement": string,
+  "suggestion": string
+}
 
 Question:
 ${body.question}
@@ -30,18 +56,19 @@ ${body.question}
 Answer:
 ${body.answer}
 
-Feedback should include:
-- one strength
-- one improvement
-- one concrete suggestion
-
-Keep it under 120 words.`,
+Keep each field under 50 words.`,
     });
-    feedback = response.output_text;
+
+    try {
+      parsed = JSON.parse(response.output_text) as ParsedFeedback;
+    } catch {
+      parsed = FEEDBACK_PARSE_FALLBACK;
+    }
   } catch {
-    feedback =
-      'Feedback could not be generated, but your answer was saved.';
+    parsed = OPENAI_FAIL_FALLBACK;
   }
+
+  const feedback = JSON.stringify(parsed);
 
   const { data, error } = await supabaseServer
     .from('interview_answers')
@@ -60,5 +87,5 @@ Keep it under 120 words.`,
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ answer: data, feedback });
+  return NextResponse.json({ answer: data, feedback: parsed });
 }
