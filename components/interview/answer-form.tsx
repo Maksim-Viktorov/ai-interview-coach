@@ -27,9 +27,18 @@ export function AnswerForm({
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const audioUrlRef = useRef<string | null>(null);
+
+  const revokeAudioObjectUrl = () => {
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -40,11 +49,14 @@ export function AnswerForm({
         }
         rec.stream?.getTracks().forEach((t) => t.stop());
       }
+      revokeAudioObjectUrl();
     };
   }, []);
 
   const startRecording = async () => {
     try {
+      revokeAudioObjectUrl();
+      setAudioUrl(null);
       setAudioBlob(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
@@ -62,6 +74,10 @@ export function AnswerForm({
         const blob = new Blob(chunksRef.current, {
           type: recorder.mimeType || 'audio/webm',
         });
+        revokeAudioObjectUrl();
+        const url = URL.createObjectURL(blob);
+        audioUrlRef.current = url;
+        setAudioUrl(url);
         setAudioBlob(blob);
         console.log(blob);
         stream.getTracks().forEach((t) => t.stop());
@@ -158,6 +174,10 @@ export function AnswerForm({
           <span className="text-sm text-green-700">Audio recorded</span>
         ) : null}
       </div>
+
+      {audioUrl ? (
+        <audio controls src={audioUrl} className="mt-2 w-full" />
+      ) : null}
 
       <textarea
         className="min-h-32 w-full rounded border p-3"
