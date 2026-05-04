@@ -28,6 +28,7 @@ export function AnswerForm({
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -97,6 +98,40 @@ export function AnswerForm({
       recorder.stop();
     }
     setIsRecording(false);
+  };
+
+  const handleTranscribe = async () => {
+    if (!audioBlob) {
+      return;
+    }
+
+    setTranscribing(true);
+    setErrorMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'recording.webm');
+
+      const res = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = (await res.json()) as { text?: string; error?: string };
+
+      if (!res.ok) {
+        setErrorMessage(data.error ?? 'Transcription failed');
+        return;
+      }
+
+      if (data.text !== undefined) {
+        setAnswer(data.text);
+      }
+    } catch {
+      setErrorMessage('Transcription failed');
+    } finally {
+      setTranscribing(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -172,6 +207,16 @@ export function AnswerForm({
         )}
         {audioBlob ? (
           <span className="text-sm text-green-700">Audio recorded</span>
+        ) : null}
+        {audioBlob ? (
+          <button
+            type="button"
+            className="rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            disabled={transcribing}
+            onClick={() => void handleTranscribe()}
+          >
+            Transcribe Recording
+          </button>
         ) : null}
       </div>
 
