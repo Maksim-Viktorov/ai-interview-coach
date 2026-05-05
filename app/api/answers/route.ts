@@ -2,10 +2,20 @@ import { NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
 import { supabaseServer } from '@/lib/supabase-server';
 
+type SpeechMetricsPayload = {
+  wordCount: number;
+  durationSeconds: number;
+  wordsPerMinute: number;
+  paceFeedback: string;
+  fillerCount: number;
+  fillerFeedback: string;
+};
+
 type AnswersRequestBody = {
   sessionId?: string;
   question?: string;
   answer?: string;
+  speechMetrics?: SpeechMetricsPayload | null;
 };
 
 const FEEDBACK_PARSE_FALLBACK = {
@@ -78,6 +88,7 @@ Keep each field under 50 words.`,
         question: body.question,
         answer: body.answer,
         feedback,
+        speech_metrics: body.speechMetrics ?? null,
       },
     ])
     .select()

@@ -212,6 +212,7 @@ export function AnswerForm({
           sessionId,
           question,
           answer,
+          speechMetrics: metrics,
         }),
       });
 
