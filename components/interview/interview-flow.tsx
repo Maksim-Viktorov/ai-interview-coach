@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { AnswerForm } from '@/components/interview/answer-form';
 
@@ -19,9 +20,21 @@ export function InterviewFlow({ sessionId, questions }: InterviewFlowProps) {
 
   if (currentQuestionIndex >= questions.length) {
     return (
-      <p className="text-lg font-medium" role="status">
-        Interview complete
-      </p>
+      <div className="space-y-6" role="status">
+        <div>
+          <p className="text-2xl font-semibold">🎉 Interview complete!</p>
+          <p className="text-sm text-gray-600">You answered all questions.</p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/"
+            className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Start new interview
+          </Link>
+        </div>
+      </div>
     );
   }
 
@@ -37,7 +50,7 @@ export function InterviewFlow({ sessionId, questions }: InterviewFlowProps) {
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <p className="text-sm text-gray-600">
         Question {displayNumber} of {total}
       </p>
@@ -52,7 +65,7 @@ export function InterviewFlow({ sessionId, questions }: InterviewFlowProps) {
 
       <button
         type="button"
-        className="mt-4 rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={!submittedCurrentQuestion}
         onClick={handleNext}
       >

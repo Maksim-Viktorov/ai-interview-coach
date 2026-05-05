@@ -52,10 +52,10 @@ export default function Home() {
     }
   };
 
-  if (loading) return <main className="p-8">Loading...</main>;
+  if (loading) return <main className="p-8 space-y-6">Loading...</main>;
 
   return (
-    <main className="p-8">
+    <main className="p-8 space-y-6">
       <h1 className="text-2xl font-bold mb-4">AI Interview Coach</h1>
 
       <h2 className="text-xl font-semibold mb-2">Interview Sessions</h2>

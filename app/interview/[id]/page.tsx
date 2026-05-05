@@ -23,7 +23,7 @@ export default async function Page({
 
   if (error || !session) {
     return (
-      <main className="p-8">
+      <main className="p-8 space-y-6">
         <p className="mb-4">Session not found</p>
         <Link
           href="/"
@@ -36,7 +36,7 @@ export default async function Page({
   }
 
   return (
-    <main className="p-8">
+    <main className="p-8 space-y-6">
       <h1 className="text-2xl font-bold mb-4">Interview Session</h1>
 
       <ul className="mb-6 space-y-2">
