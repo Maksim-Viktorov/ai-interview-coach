@@ -22,3 +22,4 @@ Columns:
 - question: text
 - answer: text
 - created_at: timestamps
+- speech_metrics: jsonb, stores transcription and delivery metrics such as word count, duration, WPM, filler count, and filler feedback
