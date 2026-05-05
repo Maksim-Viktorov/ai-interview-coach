@@ -1,8 +1,6 @@
 import Link from 'next/link';
-import {
-  InterviewFlow,
-  type RecentAnswer,
-} from '@/components/interview/interview-flow';
+import { InterviewFlow, type RecentAnswer } from '@/components/interview/interview-flow';
+import { parseSpeechMetrics } from '@/lib/speech-metrics';
 import { supabaseServer } from '@/lib/supabase-server';
 
 const questions = [
@@ -40,7 +38,7 @@ export default async function Page({
 
   const { data: answersData } = await supabaseServer
     .from('interview_answers')
-    .select('id, question, answer, feedback')
+    .select('id, question, answer, feedback, speech_metrics')
     .eq('session_id', id)
     .order('created_at', { ascending: false })
     .limit(3);
@@ -51,6 +49,7 @@ export default async function Page({
       question: string;
       answer: string;
       feedback: string | null;
+      speech_metrics: unknown;
     };
     return {
       id: r.id,
@@ -60,6 +59,7 @@ export default async function Page({
         typeof r.feedback === 'string' && r.feedback.length > 0
           ? r.feedback
           : null,
+      speechMetrics: parseSpeechMetrics(r.speech_metrics),
     };
   });
 

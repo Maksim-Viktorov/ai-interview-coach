@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { AnswerForm } from '@/components/interview/answer-form';
 import { HighlightedTranscript } from '@/components/interview/highlighted-transcript';
+import { parseSpeechMetrics, type SpeechMetrics } from '@/lib/speech-metrics';
 
 export type RecentAnswer = {
   id: string;
   question: string;
   answer: string;
   feedback: string | null;
+  speechMetrics?: SpeechMetrics | null;
 };
 
 type ParsedFeedbackDisplay =
@@ -94,6 +96,10 @@ export function InterviewFlow({
             <ul className="space-y-3">
               {recentAnswers.map((item) => {
                 const fb = parseFeedbackDisplay(item.feedback);
+                const metrics =
+                  item.speechMetrics != null
+                    ? parseSpeechMetrics(item.speechMetrics)
+                    : null;
                 const hasStructured =
                   fb.kind === 'structured' &&
                   (fb.strength || fb.improvement || fb.suggestion);
@@ -106,6 +112,25 @@ export function InterviewFlow({
                     <div className="line-clamp-5 overflow-hidden text-left">
                       <HighlightedTranscript text={item.answer} />
                     </div>
+                    {metrics ? (
+                      <div className="mt-2 space-y-1 border-t border-current/15 pt-2 text-xs text-gray-600 dark:text-gray-400">
+                        <p className="tabular-nums">
+                          Words {metrics.wordCount}
+                          <span className="mx-1.5 opacity-60">·</span>
+                          {Math.round(metrics.durationSeconds)}s
+                          <span className="mx-1.5 opacity-60">·</span>
+                          WPM {metrics.wordsPerMinute}
+                          <span className="mx-1.5 opacity-60">·</span>
+                          Fillers {metrics.fillerCount}
+                        </p>
+                        {metrics.paceFeedback ? (
+                          <p className="leading-snug">{metrics.paceFeedback}</p>
+                        ) : null}
+                        {metrics.fillerFeedback ? (
+                          <p className="leading-snug">{metrics.fillerFeedback}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {hasStructured ? (
                       <div className="pt-3 mt-1 space-y-3 border-t border-current/20">
                         {fb.strength ? (
