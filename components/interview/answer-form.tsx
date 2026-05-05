@@ -49,6 +49,8 @@ export function AnswerForm({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioUrlRef = useRef<string | null>(null);
+  const feedbackRef = useRef<HTMLDivElement | null>(null);
+  const hadFeedbackRef = useRef(false);
 
   const revokeAudioObjectUrl = () => {
     if (audioUrlRef.current) {
@@ -69,6 +71,14 @@ export function AnswerForm({
       revokeAudioObjectUrl();
     };
   }, []);
+
+  useEffect(() => {
+    const hasFeedback = feedback !== null;
+    if (hasFeedback && !hadFeedbackRef.current) {
+      feedbackRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    hadFeedbackRef.current = hasFeedback;
+  }, [feedback]);
 
   const startRecording = async () => {
     try {
@@ -219,7 +229,6 @@ export function AnswerForm({
 
       setErrorMessage(null);
       setFeedback(result.feedback ?? null);
-      setAnswer('');
       setMetrics(null);
       onSubmitted?.();
     } finally {
@@ -228,14 +237,14 @@ export function AnswerForm({
   };
 
   return (
-    <section className="rounded border p-4">
-      <h2 className="mb-2 text-xl font-semibold">
+    <section className="rounded border p-4 space-y-6">
+      <h2 className="text-xl font-semibold">
         Question {questionNumber}
       </h2>
 
-      <p className="mb-4">{question}</p>
+      <p>{question}</p>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {!isRecording ? (
           <button
             type="button"
@@ -267,13 +276,13 @@ export function AnswerForm({
       </div>
 
       {transcriptionError ? (
-        <p className="mb-2 text-sm text-red-600" role="alert">
+        <p className="text-sm text-red-600" role="alert">
           {transcriptionError}
         </p>
       ) : null}
 
       {audioUrl ? (
-        <audio controls src={audioUrl} className="mt-2 w-full" />
+        <audio controls src={audioUrl} className="w-full" />
       ) : null}
 
       <textarea
@@ -284,7 +293,7 @@ export function AnswerForm({
       />
 
       {metrics ? (
-        <div className="mt-4 text-sm text-gray-700">
+        <div className="text-sm text-gray-700">
           <p>Words: {metrics.wordCount}</p>
           <p>Duration: {Math.round(metrics.durationSeconds)}s</p>
           <p>WPM: {metrics.wordsPerMinute}</p>
@@ -295,14 +304,15 @@ export function AnswerForm({
       ) : null}
 
       {errorMessage ? (
-        <p className="mt-2 text-sm text-red-600" role="alert">
+        <p className="text-sm text-red-600" role="alert">
           {errorMessage}
         </p>
       ) : null}
 
       {feedback ? (
         <div
-          className="mt-4 space-y-3 rounded border border-green-200 bg-green-50/80 p-4 text-sm"
+          ref={feedbackRef}
+          className="space-y-3 rounded border border-green-200 bg-green-50/80 p-4 text-sm"
           role="status"
         >
           <div>
@@ -322,11 +332,11 @@ export function AnswerForm({
 
       <button
         type="button"
-        className="mt-4 rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={submitting}
         onClick={() => void handleSubmit()}
       >
-        Submit Answer
+        {submitting ? 'Submitting...' : 'Submit Answer'}
       </button>
     </section>
   );
