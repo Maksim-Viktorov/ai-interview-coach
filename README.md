@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Interview Coach
+
+A full-stack AI-powered interview coach that lets users practice behavioral interview questions with voice or text input, then receive structured feedback based on both response content and speaking patterns.
+
+## Features
+
+- **Voice recording** — Record answers in the browser; audio can be played back before or after processing.
+- **Speech-to-text transcription** — Sends audio to OpenAI on the server and fills the answer field with the transcript.
+- **Speech metrics** — Word count, duration, words per minute (WPM), pacing feedback, and filler-word detection.
+- **AI-generated feedback** — After submit, responses are evaluated and returned as structured feedback (strengths, improvements, and suggestions).
+- **Interview session flow** — Multi-step interview experience with persistent sessions and a guided completion flow.
+
+## Tech Stack
+
+- **Next.js** (App Router) with **React** and **TypeScript**
+- **Supabase** — persistence for interview sessions and submitted answers
+- **OpenAI** — audio transcription and answer feedback (server-side only)
+- **Tailwind CSS** — styling
+
+## How It Works
+
+1. Create an interview session from the home page.
+2. Answer each question using text or voice.
+3. If using voice:
+   - Audio is recorded in the browser
+   - Sent to the server and transcribed
+4. Speech metrics are computed and displayed.
+5. Submit the answer to receive structured AI feedback.
+6. Continue until all questions are completed.
 
 ## Getting Started
 
-First, run the development server:
+### Install dependencies
+
+```bash
+npm install
+```
+
+### Run the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+All OpenAI requests are performed server-side to ensure API keys are not exposed to the client.
 
-## Learn More
+Create a `.env.local` file in the project root with:
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | Purpose |
+| -------- | ------- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key (client and server helpers) |
+| `OPENAI_API_KEY` | OpenAI API key (used only in API routes, never exposed to the client) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+You will need the matching **Supabase schema** (`interview_sessions`, `interview_answers`; see `docs/database.md`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+- **`app/`** — App Router pages and API route handlers (`/api/sessions`, `/api/answers`, `/api/transcribe`, interview and home routes).
+- **`components/`** — UI components, including the interview flow and answer form.
+- **`lib/`** — Shared clients (e.g. Supabase and OpenAI) used from server code.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Key Design Decisions
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Server-side AI calls — OpenAI requests are handled via API routes to keep API keys secure.
+- Progressive interview flow — Users answer one question at a time to simulate real interview conditions.
+- Voice-first input — Supports both text and audio, enabling more realistic interview practice.
+
+## Motivation
+
+This project explores how AI can be used not just for answering questions, but for improving communication skills through feedback on both content and delivery.
+
+## Future Improvements
+
+- **Coding interview mode** — Extend beyond behavioral Q&A (e.g. prompts, rubrics, or IDE-style tasks).
+- **Advanced speech analytics** — Pause detection, timestamps, and richer pacing signals (toward real-time coaching).
+- **Answer history and dashboard** — Review past sessions, trends, and progress over time.
