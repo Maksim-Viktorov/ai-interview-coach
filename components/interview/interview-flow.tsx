@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { AnswerForm } from '@/components/interview/answer-form';
+import { HighlightedTranscript } from '@/components/interview/highlighted-transcript';
 
 export type RecentAnswer = {
   id: string;
@@ -102,9 +103,9 @@ export function InterviewFlow({
                     className="rounded border p-4 space-y-2 text-sm"
                   >
                     <p className="font-semibold text-balance">{item.question}</p>
-                    <p className="whitespace-pre-wrap line-clamp-5">
-                      {item.answer}
-                    </p>
+                    <div className="line-clamp-5 overflow-hidden text-left">
+                      <HighlightedTranscript text={item.answer} />
+                    </div>
                     {hasStructured ? (
                       <div className="pt-3 mt-1 space-y-3 border-t border-current/20">
                         {fb.strength ? (

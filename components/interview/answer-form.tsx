@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { HighlightedTranscript } from '@/components/interview/highlighted-transcript';
 
 type AnswerFormProps = {
   sessionId: string;
@@ -45,6 +46,7 @@ export function AnswerForm({
   const [audioDurationSeconds, setAudioDurationSeconds] = useState<
     number | null
   >(null);
+  const [transcriptEditing, setTranscriptEditing] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -116,7 +118,6 @@ export function AnswerForm({
             setAudioDurationSeconds(audio.duration);
           }
         });
-        console.log(blob);
         stream.getTracks().forEach((t) => t.stop());
         mediaRecorderRef.current = null;
         setTimeout(() => {
@@ -174,6 +175,7 @@ export function AnswerForm({
         setAnswer(data.text);
       }
       setMetrics(data.metrics ?? null);
+      setTranscriptEditing(false);
       setTranscriptionError(null);
     } catch {
       setTranscriptionError('Transcription failed');
@@ -229,7 +231,6 @@ export function AnswerForm({
 
       setErrorMessage(null);
       setFeedback(result.feedback ?? null);
-      setMetrics(null);
       onSubmitted?.();
     } finally {
       setSubmitting(false);
@@ -285,12 +286,41 @@ export function AnswerForm({
         <audio controls src={audioUrl} className="w-full" />
       ) : null}
 
-      <textarea
-        className="min-h-32 w-full rounded border p-3"
-        placeholder="Type your answer here..."
-        value={answer}
-        onChange={(e) => setAnswer(e.target.value)}
-      />
+      {((metrics !== null || feedback !== null) && !transcriptEditing) ? (
+        <div className="space-y-2">
+          <div
+            className="min-h-32 w-full rounded border p-3 text-left leading-relaxed"
+            aria-label="Transcript with filler words highlighted"
+          >
+            <HighlightedTranscript text={answer} />
+          </div>
+          <button
+            type="button"
+            className="text-sm font-medium text-gray-700 underline underline-offset-2 hover:text-gray-900"
+            onClick={() => setTranscriptEditing(true)}
+          >
+            Edit transcript
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {(metrics !== null || feedback !== null) && transcriptEditing ? (
+            <button
+              type="button"
+              className="text-sm font-medium text-gray-700 underline underline-offset-2 hover:text-gray-900"
+              onClick={() => setTranscriptEditing(false)}
+            >
+              Show highlighted transcript
+            </button>
+          ) : null}
+          <textarea
+            className="min-h-32 w-full rounded border p-3"
+            placeholder="Type your answer here..."
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+          />
+        </div>
+      )}
 
       {metrics ? (
         <div className="text-sm text-gray-700">
