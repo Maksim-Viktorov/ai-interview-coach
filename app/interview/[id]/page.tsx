@@ -1,5 +1,8 @@
 import Link from 'next/link';
-import { InterviewFlow } from '@/components/interview/interview-flow';
+import {
+  InterviewFlow,
+  type RecentAnswer,
+} from '@/components/interview/interview-flow';
 import { supabaseServer } from '@/lib/supabase-server';
 
 const questions = [
@@ -35,6 +38,31 @@ export default async function Page({
     );
   }
 
+  const { data: answersData } = await supabaseServer
+    .from('interview_answers')
+    .select('id, question, answer, feedback')
+    .eq('session_id', id)
+    .order('created_at', { ascending: false })
+    .limit(3);
+
+  const recentAnswers: RecentAnswer[] = (answersData ?? []).map((row) => {
+    const r = row as {
+      id: string;
+      question: string;
+      answer: string;
+      feedback: string | null;
+    };
+    return {
+      id: r.id,
+      question: r.question,
+      answer: r.answer,
+      feedback:
+        typeof r.feedback === 'string' && r.feedback.length > 0
+          ? r.feedback
+          : null,
+    };
+  });
+
   return (
     <main className="p-8 space-y-6">
       <h1 className="text-2xl font-bold mb-4">Interview Session</h1>
@@ -54,7 +82,12 @@ export default async function Page({
           {new Date(session.created_at).toLocaleString()}
         </li>
       </ul>
-      <InterviewFlow sessionId={session.id} questions={questions} />
+      <InterviewFlow
+        sessionId={session.id}
+        questions={questions}
+        recentAnswers={recentAnswers}
+      />
+
       <Link
         href="/"
         className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
