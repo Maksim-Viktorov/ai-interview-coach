@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabase-server';
 export async function POST() {
   const { data, error } = await supabaseServer
     .from('interview_sessions')
-    .insert([{ interview_type: 'coding' }])
+    .insert([{ interview_type: 'behavioral' }])
     .select()
     .single();
 

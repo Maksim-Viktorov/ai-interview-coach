@@ -44,6 +44,9 @@ export async function POST(request: Request) {
   const response = await openai.audio.transcriptions.create({
     file,
     model: 'gpt-4o-mini-transcribe',
+    language: 'en',
+    prompt:
+      'The speaker is answering a software engineering behavioral interview question in English. Transcribe strictly in English. Preserve filler words such as um, uh, like, basically, actually, and you know.',
   });
 
   const text = response.text;
