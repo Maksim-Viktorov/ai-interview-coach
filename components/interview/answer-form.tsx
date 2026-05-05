@@ -109,6 +109,9 @@ export function AnswerForm({
         console.log(blob);
         stream.getTracks().forEach((t) => t.stop());
         mediaRecorderRef.current = null;
+        setTimeout(() => {
+          void transcribeBlob(blob, null);
+        }, 300);
       };
 
       recorder.start();
@@ -126,24 +129,19 @@ export function AnswerForm({
     setIsRecording(false);
   };
 
-  const handleTranscribe = async () => {
-    if (!audioBlob) {
-      setTranscriptionError('Record audio before transcribing.');
-      return;
-    }
-
+  const transcribeBlob = async (
+    blob: Blob,
+    durationSeconds: number | null,
+  ) => {
     setTranscribing(true);
     setTranscriptionError(null);
     setMetrics(null);
 
     try {
       const formData = new FormData();
-      formData.append('file', audioBlob, 'recording.webm');
-      if (
-        audioDurationSeconds !== null &&
-        Number.isFinite(audioDurationSeconds)
-      ) {
-        formData.append('durationSeconds', String(audioDurationSeconds));
+      formData.append('file', blob, 'recording.webm');
+      if (durationSeconds !== null && Number.isFinite(durationSeconds)) {
+        formData.append('durationSeconds', String(durationSeconds));
       }
 
       const res = await fetch('/api/transcribe', {
@@ -172,6 +170,15 @@ export function AnswerForm({
     } finally {
       setTranscribing(false);
     }
+  };
+
+  const handleTranscribe = async () => {
+    if (!audioBlob) {
+      setTranscriptionError('Record audio before transcribing.');
+      return;
+    }
+
+    await transcribeBlob(audioBlob, audioDurationSeconds);
   };
 
   const handleSubmit = async () => {
