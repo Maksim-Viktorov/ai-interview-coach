@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { HighlightedTranscript } from '@/components/interview/highlighted-transcript';
+import {
+  analyzePausesFromSamples,
+  type PauseMetrics,
+} from '@/lib/pause-analysis';
 
 type AnswerFormProps = {
   sessionId: string;
@@ -25,6 +29,11 @@ type TranscribeMetrics = {
   fillerFeedback: string;
 };
 
+/** Transcription row plus pauses, or pause-only before transcription finishes. */
+type MetricsState =
+  | (TranscribeMetrics & Partial<PauseMetrics>)
+  | PauseMetrics;
+
 export function AnswerForm({
   sessionId,
   question,
@@ -42,7 +51,8 @@ export function AnswerForm({
   const [transcriptionError, setTranscriptionError] = useState<string | null>(
     null,
   );
-  const [metrics, setMetrics] = useState<TranscribeMetrics | null>(null);
+  const [metrics, setMetrics] = useState<MetricsState | null>(null);
+  const [pauseMetrics, setPauseMetrics] = useState<PauseMetrics | null>(null);
   const [audioDurationSeconds, setAudioDurationSeconds] = useState<
     number | null
   >(null);
@@ -53,6 +63,52 @@ export function AnswerForm({
   const audioUrlRef = useRef<string | null>(null);
   const feedbackRef = useRef<HTMLDivElement | null>(null);
   const hadFeedbackRef = useRef(false);
+  /** Latest pause analysis; merged into `metrics` after transcription completes. */
+  const pauseMetricsRef = useRef<PauseMetrics | null>(null);
+
+  const mergePauseIntoMetrics = (
+    base: TranscribeMetrics | null,
+  ): MetricsState | null => {
+    const pause = pauseMetricsRef.current;
+    if (!base && !pause) return null;
+    if (!base) return { ...pause! } as MetricsState;
+    return { ...base, ...(pause ?? {}) } as MetricsState;
+  };
+
+  const analyzePauseMetrics = async (blob: Blob) => {
+    const AudioContextClass =
+      window.AudioContext ||
+      (
+        window as unknown as {
+          webkitAudioContext: typeof AudioContext;
+        }
+      ).webkitAudioContext;
+    let audioContext: AudioContext | null = null;
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      audioContext = new AudioContextClass();
+      const audioBuffer = await audioContext.decodeAudioData(
+        arrayBuffer.slice(0),
+      );
+      const samples = audioBuffer.getChannelData(0);
+      const result = analyzePausesFromSamples(samples, audioBuffer.sampleRate);
+      setPauseMetrics(result);
+      pauseMetricsRef.current = result;
+      setMetrics((prev) => {
+        if (prev && 'wordCount' in prev) {
+          return {
+            ...(prev as TranscribeMetrics & Partial<PauseMetrics>),
+            ...result,
+          } as MetricsState;
+        }
+        return { ...result } as MetricsState;
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      void audioContext?.close?.();
+    }
+  };
 
   const revokeAudioObjectUrl = () => {
     if (audioUrlRef.current) {
@@ -88,6 +144,8 @@ export function AnswerForm({
       setAudioUrl(null);
       setAudioBlob(null);
       setMetrics(null);
+      setPauseMetrics(null);
+      pauseMetricsRef.current = null;
       setAudioDurationSeconds(null);
       setTranscriptionError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -120,6 +178,7 @@ export function AnswerForm({
         });
         stream.getTracks().forEach((t) => t.stop());
         mediaRecorderRef.current = null;
+        void analyzePauseMetrics(blob);
         setTimeout(() => {
           void transcribeBlob(blob, null);
         }, 300);
@@ -168,17 +227,19 @@ export function AnswerForm({
 
       if (!res.ok) {
         setTranscriptionError(data.error ?? 'Transcription failed');
+        setMetrics(mergePauseIntoMetrics(null));
         return;
       }
 
       if (data.text !== undefined) {
         setAnswer(data.text);
       }
-      setMetrics(data.metrics ?? null);
+      setMetrics(mergePauseIntoMetrics(data.metrics ?? null));
       setTranscriptEditing(false);
       setTranscriptionError(null);
     } catch {
       setTranscriptionError('Transcription failed');
+      setMetrics(mergePauseIntoMetrics(null));
     } finally {
       setTranscribing(false);
     }
@@ -323,7 +384,7 @@ export function AnswerForm({
         </div>
       )}
 
-      {metrics ? (
+      {metrics && 'wordCount' in metrics ? (
         <div className="text-sm text-gray-700">
           <p>Words: {metrics.wordCount}</p>
           <p>Duration: {Math.round(metrics.durationSeconds)}s</p>
@@ -331,6 +392,14 @@ export function AnswerForm({
           <p>{metrics.paceFeedback}</p>
           <p>Fillers: {metrics.fillerCount}</p>
           <p>{metrics.fillerFeedback}</p>
+        </div>
+      ) : null}
+
+      {pauseMetrics ? (
+        <div className="text-sm text-gray-700">
+          <p>Pauses: {pauseMetrics.pauseCount}</p>
+          <p>Longest pause: {pauseMetrics.longestPauseSeconds.toFixed(1)}s</p>
+          <p>{pauseMetrics.pauseFeedback}</p>
         </div>
       ) : null}
 
