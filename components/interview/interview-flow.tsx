@@ -7,12 +7,54 @@ import { AnswerForm } from '@/components/interview/answer-form';
 import { HighlightedTranscript } from '@/components/interview/highlighted-transcript';
 import { parseSpeechMetrics, type SpeechMetrics } from '@/lib/speech-metrics';
 
+/** Saved jsonb may include pause analytics alongside core speech metrics. */
+export type SavedSpeechMetricsDisplay = SpeechMetrics & {
+  pauseCount?: number;
+  totalPauseSeconds?: number;
+  longestPauseSeconds?: number;
+  pauseFeedback?: string;
+};
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+/**
+ * Validates core speech_metrics from DB; attaches optional pause fields when present and well-typed.
+ */
+function parseCompletionSpeechMetrics(
+  raw: unknown,
+): SavedSpeechMetricsDisplay | null {
+  const base = parseSpeechMetrics(raw);
+  if (!base || raw == null || typeof raw !== 'object') return null;
+
+  const o = raw as Record<string, unknown>;
+  const pauseCount = isFiniteNumber(o.pauseCount) ? o.pauseCount : undefined;
+  const totalPauseSeconds = isFiniteNumber(o.totalPauseSeconds)
+    ? o.totalPauseSeconds
+    : undefined;
+  const longestPauseSeconds = isFiniteNumber(o.longestPauseSeconds)
+    ? o.longestPauseSeconds
+    : undefined;
+  const pauseFeedback =
+    typeof o.pauseFeedback === 'string' ? o.pauseFeedback : undefined;
+
+  const out: SavedSpeechMetricsDisplay = { ...base };
+  if (pauseCount !== undefined) out.pauseCount = pauseCount;
+  if (totalPauseSeconds !== undefined) out.totalPauseSeconds = totalPauseSeconds;
+  if (longestPauseSeconds !== undefined) out.longestPauseSeconds = longestPauseSeconds;
+  if (pauseFeedback !== undefined) out.pauseFeedback = pauseFeedback;
+
+  return out;
+}
+
+/** Pass raw jsonb (`speech_metrics`) so optional pause keys are preserved. */
 export type RecentAnswer = {
   id: string;
   question: string;
   answer: string;
   feedback: string | null;
-  speechMetrics?: SpeechMetrics | null;
+  speechMetrics?: unknown | null;
 };
 
 type ParsedFeedbackDisplay =
@@ -98,8 +140,14 @@ export function InterviewFlow({
                 const fb = parseFeedbackDisplay(item.feedback);
                 const metrics =
                   item.speechMetrics != null
-                    ? parseSpeechMetrics(item.speechMetrics)
+                    ? parseCompletionSpeechMetrics(item.speechMetrics)
                     : null;
+                const hasPauseMetrics =
+                  metrics != null &&
+                  (isFiniteNumber(metrics.pauseCount) ||
+                    isFiniteNumber(metrics.longestPauseSeconds) ||
+                    (typeof metrics.pauseFeedback === 'string' &&
+                      metrics.pauseFeedback !== ''));
                 const hasStructured =
                   fb.kind === 'structured' &&
                   (fb.strength || fb.improvement || fb.suggestion);
@@ -128,6 +176,24 @@ export function InterviewFlow({
                         ) : null}
                         {metrics.fillerFeedback ? (
                           <p className="leading-snug">{metrics.fillerFeedback}</p>
+                        ) : null}
+                        {hasPauseMetrics ? (
+                          <>
+                            {isFiniteNumber(metrics.pauseCount) ? (
+                              <p>Pauses: {metrics.pauseCount}</p>
+                            ) : null}
+                            {isFiniteNumber(metrics.longestPauseSeconds) ? (
+                              <p>
+                                Longest pause:{' '}
+                                {metrics.longestPauseSeconds.toFixed(1)}s
+                              </p>
+                            ) : null}
+                            {metrics.pauseFeedback ? (
+                              <p className="leading-snug">
+                                {metrics.pauseFeedback}
+                              </p>
+                            ) : null}
+                          </>
                         ) : null}
                       </div>
                     ) : null}

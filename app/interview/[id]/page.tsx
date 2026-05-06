@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { InterviewFlow, type RecentAnswer } from '@/components/interview/interview-flow';
-import { parseSpeechMetrics } from '@/lib/speech-metrics';
 import { supabaseServer } from '@/lib/supabase-server';
 
 const questions = [
@@ -59,7 +58,7 @@ export default async function Page({
         typeof r.feedback === 'string' && r.feedback.length > 0
           ? r.feedback
           : null,
-      speechMetrics: parseSpeechMetrics(r.speech_metrics),
+      speechMetrics: r.speech_metrics ?? null,
     };
   });
 
