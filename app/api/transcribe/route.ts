@@ -43,13 +43,28 @@ export async function POST(request: Request) {
 
   const response = await openai.audio.transcriptions.create({
     file,
-    model: 'gpt-4o-mini-transcribe',
+    model: 'whisper-1',
     language: 'en',
+    response_format: 'verbose_json',
+    timestamp_granularities: ['word'],
     prompt:
       'The speaker is answering a software engineering behavioral interview question in English. Transcribe strictly in English. Preserve filler words such as um, uh, like, basically, actually, and you know.',
   });
-
+  
+  console.log(JSON.stringify(response, null, 2))
   const text = response.text;
+
+  const wordTimings =
+    response.words?.flatMap((w) => {
+      if (
+        typeof w.word !== 'string' ||
+        !Number.isFinite(w.start) ||
+        !Number.isFinite(w.end)
+      ) {
+        return [];
+      }
+      return [{ word: w.word, start: w.start, end: w.end }];
+    }) ?? [];
 
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
 
@@ -102,5 +117,6 @@ export async function POST(request: Request) {
       fillerCount,
       fillerFeedback,
     },
+    wordTimings,
   });
 }

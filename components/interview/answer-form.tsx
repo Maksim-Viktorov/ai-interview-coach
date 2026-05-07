@@ -214,7 +214,8 @@ export function AnswerForm({
         formData.append('durationSeconds', String(durationSeconds));
       }
 
-      const res = await fetch('/api/transcribe', {
+      // TEMP: experimental Deepgram path (revert to /api/transcribe for OpenAI)
+      const res = await fetch('/api/transcribe-deepgram', {
         method: 'POST',
         body: formData,
       });
