@@ -13,6 +13,15 @@ export type DeepgramWord = {
   end: number;
 };
 
+export type UtteranceAnalytics = {
+  index: number;
+  start: number;
+  end: number;
+  durationSeconds: number;
+  wordCount: number;
+  speakingRateWpm: number;
+};
+
 export type DeepgramAnalytics = {
   pauseCount: number;
   longPauseCount: number;
@@ -23,6 +32,9 @@ export type DeepgramAnalytics = {
   totalSpeechSeconds: number;
   speechRatio: number;
   speakingRateWpm: number;
+  utterances: UtteranceAnalytics[];
+  averageUtteranceWpm: number;
+  wpmVariance: number;
 };
 
 function round2(value: number): number {
@@ -61,6 +73,9 @@ function emptyAnalytics(): DeepgramAnalytics {
     totalSpeechSeconds: 0,
     speechRatio: 0,
     speakingRateWpm: 0,
+    utterances: [],
+    averageUtteranceWpm: 0,
+    wpmVariance: 0,
   };
 }
 
@@ -125,6 +140,62 @@ export function analyzeDeepgramSpeech(options: {
   const averagePauseSeconds =
     pauseCount > 0 ? round2(totalPauseSecondsRaw / pauseCount) : 0;
 
+  const utteranceAnalyticsList: UtteranceAnalytics[] = [];
+  const utteranceWpmValues: number[] = [];
+
+  for (let index = 0; index < sorted.length; index++) {
+    const utterance = sorted[index]!;
+    const utteranceStart = utterance.start;
+    const utteranceEnd = utterance.end;
+    const durationRaw = utteranceEnd - utteranceStart;
+
+    const wordsInUtterance = validWords.filter((w) => {
+      return w.end > utteranceStart && w.start < utteranceEnd;
+    });
+    const utteranceWordCount = wordsInUtterance.length;
+
+    const durationSeconds = round2(durationRaw);
+
+    let utteranceSpeakingRateWpm = 0;
+    if (durationRaw > 0 && Number.isFinite(durationRaw)) {
+      utteranceSpeakingRateWpm = round2(
+        (utteranceWordCount / durationRaw) * 60,
+      );
+    }
+
+    utteranceWpmValues.push(utteranceSpeakingRateWpm);
+
+    utteranceAnalyticsList.push({
+      index,
+      start: utteranceStart,
+      end: utteranceEnd,
+      durationSeconds,
+      wordCount: utteranceWordCount,
+      speakingRateWpm: utteranceSpeakingRateWpm,
+    });
+  }
+
+  let averageUtteranceWpm = 0;
+  let wpmVariance = 0;
+
+  const nUtterances = utteranceWpmValues.length;
+  if (nUtterances > 0) {
+    let sumWpm = 0;
+    for (let i = 0; i < nUtterances; i++) {
+      sumWpm += utteranceWpmValues[i]!;
+    }
+    const meanWpm = sumWpm / nUtterances;
+    averageUtteranceWpm = round2(meanWpm);
+
+    let sumSquaredDeviation = 0;
+    for (let i = 0; i < nUtterances; i++) {
+      const wpm = utteranceWpmValues[i]!;
+      const deviation = wpm - meanWpm;
+      sumSquaredDeviation += deviation * deviation;
+    }
+    wpmVariance = round2(sumSquaredDeviation / nUtterances);
+  }
+
   return {
     pauseCount,
     longPauseCount,
@@ -135,5 +206,8 @@ export function analyzeDeepgramSpeech(options: {
     totalSpeechSeconds: round2(totalSpeechSeconds),
     speechRatio,
     speakingRateWpm,
+    utterances: utteranceAnalyticsList,
+    averageUtteranceWpm,
+    wpmVariance,
   };
 }
