@@ -22,6 +22,16 @@ export type UtteranceAnalytics = {
   speakingRateWpm: number;
 };
 
+/** Timeline bucket pacing consistency (preferred over utterance-based variance). */
+export type DeepgramConsistency = {
+  bucketWindowSeconds: number;
+  bucketCount: number;
+  bucketWpmMean: number | null;
+  bucketWpmStdDev: number | null;
+  bucketWpmCv: number | null;
+  pacingTrendSlope: number | null;
+};
+
 export type DeepgramAnalytics = {
   pauseCount: number;
   longPauseCount: number;
@@ -34,7 +44,9 @@ export type DeepgramAnalytics = {
   speakingRateWpm: number;
   utterances: UtteranceAnalytics[];
   averageUtteranceWpm: number;
+  /** @deprecated Legacy: population variance of per-utterance WPM — driven by segmentation, not rhythm. Prefer `consistency`. */
   wpmVariance: number;
+  consistency: DeepgramConsistency;
 };
 
 function round2(value: number): number {
@@ -62,6 +74,17 @@ function isValidWord(w: unknown): w is DeepgramWord {
   return start <= end;
 }
 
+function emptyConsistency(): DeepgramConsistency {
+  return {
+    bucketWindowSeconds: 0,
+    bucketCount: 0,
+    bucketWpmMean: null,
+    bucketWpmStdDev: null,
+    bucketWpmCv: null,
+    pacingTrendSlope: null,
+  };
+}
+
 function emptyAnalytics(): DeepgramAnalytics {
   return {
     pauseCount: 0,
@@ -76,6 +99,127 @@ function emptyAnalytics(): DeepgramAnalytics {
     utterances: [],
     averageUtteranceWpm: 0,
     wpmVariance: 0,
+    consistency: emptyConsistency(),
+  };
+}
+
+/** Midpoint-assignment buckets over [speechStart, speechEnd]. Only non-empty (≥1 word) buckets produce WPM values. */
+function computeBucketConsistency(params: {
+  speechStart: number;
+  speechEnd: number;
+  validWords: DeepgramWord[];
+  totalSpeechSeconds: number;
+  wordCount: number;
+}): DeepgramConsistency {
+  const { speechStart, speechEnd, validWords, totalSpeechSeconds, wordCount } =
+    params;
+
+  if (
+    totalSpeechSeconds < 8 ||
+    wordCount < 10 ||
+    !Number.isFinite(speechStart) ||
+    !Number.isFinite(speechEnd) ||
+    speechEnd <= speechStart
+  ) {
+    return emptyConsistency();
+  }
+
+  const timelineSeconds = speechEnd - speechStart;
+  const bucketWindowSeconds = timelineSeconds < 20 ? 3 : 5;
+
+  const bucketWpmValues: number[] = [];
+
+  for (let i = 0; ; i++) {
+    const bStart = speechStart + i * bucketWindowSeconds;
+    if (bStart >= speechEnd) break;
+    const bEnd = Math.min(bStart + bucketWindowSeconds, speechEnd);
+    const bucketDurationSeconds = bEnd - bStart;
+    if (bucketDurationSeconds <= 0 || !Number.isFinite(bucketDurationSeconds)) {
+      continue;
+    }
+
+    let wordsInBucket = 0;
+    for (const w of validWords) {
+      const mid = (w.start + w.end) / 2;
+      if (mid >= bStart && mid < bEnd) {
+        wordsInBucket += 1;
+      }
+    }
+
+    if (wordsInBucket === 0) continue;
+
+    const bucketWpm = (wordsInBucket / bucketDurationSeconds) * 60;
+    bucketWpmValues.push(round2(bucketWpm));
+  }
+
+  const bucketCount = bucketWpmValues.length;
+
+  let bucketWpmMean: number | null = null;
+  let bucketWpmStdDev: number | null = null;
+  let bucketWpmCv: number | null = null;
+  let pacingTrendSlope: number | null = null;
+
+  if (bucketCount === 0) {
+    return {
+      bucketWindowSeconds,
+      bucketCount: 0,
+      bucketWpmMean: null,
+      bucketWpmStdDev: null,
+      bucketWpmCv: null,
+      pacingTrendSlope: null,
+    };
+  }
+
+  let sumBucket = 0;
+  for (let j = 0; j < bucketCount; j++) {
+    sumBucket += bucketWpmValues[j]!;
+  }
+  const meanBucket = sumBucket / bucketCount;
+  bucketWpmMean = round2(meanBucket);
+
+  let sumSqDev = 0;
+  for (let j = 0; j < bucketCount; j++) {
+    const d = bucketWpmValues[j]! - meanBucket;
+    sumSqDev += d * d;
+  }
+  const variancePop = sumSqDev / bucketCount;
+  const stdBucket = Math.sqrt(variancePop);
+  bucketWpmStdDev = round2(stdBucket);
+
+  if (meanBucket <= 0) {
+    bucketWpmCv = null;
+  } else {
+    bucketWpmCv = round2(stdBucket / meanBucket);
+  }
+
+  if (bucketCount >= 3) {
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumX2 = 0;
+    const nSlope = bucketCount;
+    for (let x = 0; x < nSlope; x++) {
+      const y = bucketWpmValues[x]!;
+      sumX += x;
+      sumY += y;
+      sumXY += x * y;
+      sumX2 += x * x;
+    }
+    const denom = nSlope * sumX2 - sumX * sumX;
+    if (Math.abs(denom) < 1e-12) {
+      pacingTrendSlope = round2(0);
+    } else {
+      pacingTrendSlope = round2((nSlope * sumXY - sumX * sumY) / denom);
+    }
+  }
+
+  return {
+    bucketWindowSeconds,
+    bucketCount,
+    bucketWpmMean,
+    bucketWpmStdDev,
+    bucketWpmCv,
+    pacingTrendSlope,
   };
 }
 
@@ -176,6 +320,7 @@ export function analyzeDeepgramSpeech(options: {
   }
 
   let averageUtteranceWpm = 0;
+  /** Legacy utterance-WPM variance (coach still consumes until updated). */
   let wpmVariance = 0;
 
   const nUtterances = utteranceWpmValues.length;
@@ -196,6 +341,14 @@ export function analyzeDeepgramSpeech(options: {
     wpmVariance = round2(sumSquaredDeviation / nUtterances);
   }
 
+  const consistency = computeBucketConsistency({
+    speechStart: first.start,
+    speechEnd: last.end,
+    validWords,
+    totalSpeechSeconds,
+    wordCount,
+  });
+
   return {
     pauseCount,
     longPauseCount,
@@ -209,5 +362,6 @@ export function analyzeDeepgramSpeech(options: {
     utterances: utteranceAnalyticsList,
     averageUtteranceWpm,
     wpmVariance,
+    consistency,
   };
 }

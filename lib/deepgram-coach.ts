@@ -128,10 +128,38 @@ export function generateCoachFeedback(
   const longPauseCount = finiteOrZero(analytics.longPauseCount);
   const speechRatio = finiteOrZero(analytics.speechRatio);
   const wpmVariance = finiteOrZero(analytics.wpmVariance);
+  const legacyVariance = wpmVariance;
   const speakingRateWpm = finiteOrZero(analytics.speakingRateWpm);
   const utteranceCount = Array.isArray(analytics.utterances)
     ? analytics.utterances.length
     : 0;
+
+  const consistencyBlock = analytics.consistency;
+  const bucketCv =
+    consistencyBlock?.bucketWpmCv === null ||
+    consistencyBlock?.bucketWpmCv === undefined ||
+    typeof consistencyBlock.bucketWpmCv !== 'number' ||
+    !Number.isFinite(consistencyBlock.bucketWpmCv)
+      ? null
+      : consistencyBlock.bucketWpmCv;
+  const slope =
+    consistencyBlock?.pacingTrendSlope === null ||
+    consistencyBlock?.pacingTrendSlope === undefined ||
+    typeof consistencyBlock.pacingTrendSlope !== 'number' ||
+    !Number.isFinite(consistencyBlock.pacingTrendSlope)
+      ? null
+      : consistencyBlock.pacingTrendSlope;
+  const bucketCount = finiteOrZero(consistencyBlock?.bucketCount ?? 0);
+
+  const usingBucketModel = bucketCv !== null && bucketCount >= 3;
+
+  console.log('[deepgram] consistency debug', {
+    bucketCv,
+    slope,
+    bucketCount,
+    legacyVariance,
+    usingBucketModel,
+  });
 
   // pauseCount / longPauseCount: used ONLY below for pauseScore (single source for pause penalties)
   let pauseBandDeduction = 0;
@@ -147,13 +175,26 @@ export function generateCoachFeedback(
   const pauseScore = Math.min(35, pauseBandDeduction + longPauseComponent);
 
   let varianceScore = 0;
-  if (wpmVariance > 900) {
-    varianceScore = 15;
-  } else if (wpmVariance > 400) {
-    varianceScore = 8;
-  }
-  if (utteranceCount < 3) {
-    varianceScore = Math.min(varianceScore, 5);
+  if (usingBucketModel && bucketCv !== null) {
+    if (bucketCv < 0.15) {
+      varianceScore = 0;
+    } else if (bucketCv <= 0.35) {
+      varianceScore = 5;
+    } else {
+      varianceScore = 12;
+    }
+    if (slope !== null && Math.abs(slope) > 8) {
+      varianceScore += 5;
+    }
+  } else {
+    if (legacyVariance > 900) {
+      varianceScore = 15;
+    } else if (legacyVariance > 400) {
+      varianceScore = 8;
+    }
+    if (utteranceCount < 3) {
+      varianceScore = Math.min(varianceScore, 5);
+    }
   }
 
   const totalScoreRaw = 100 - pauseScore - varianceScore;
@@ -198,7 +239,25 @@ export function generateCoachFeedback(
   let consistencyLabel: DeepgramCoachFeedback['consistency']['label'];
   let consistencyExplanation: string;
 
-  if (utteranceCount < 3) {
+  if (usingBucketModel && bucketCv !== null) {
+    if (bucketCv < 0.15) {
+      consistencyLabel = 'stable';
+      consistencyExplanation = `Bucket-based pacing is fairly steady across the timeline (CV ${bucketCv.toFixed(2)} across ${bucketCount} buckets).`;
+    } else if (bucketCv <= 0.35) {
+      consistencyLabel = 'moderate';
+      consistencyExplanation = `Moderate pacing spread between time buckets (CV ${bucketCv.toFixed(2)} across ${bucketCount} buckets); delivery should still feel acceptable.`;
+    } else {
+      consistencyLabel = 'unstable';
+      consistencyExplanation = `Pacing swings strongly between timeline buckets (CV ${bucketCv.toFixed(2)} across ${bucketCount} buckets), which tends to sound uneven.`;
+    }
+    if (
+      slope !== null &&
+      Number.isFinite(slope) &&
+      Math.abs(slope) > 8
+    ) {
+      consistencyExplanation += ` Rapid change in tempo over time is also evident (trend slope ${slope >= 0 ? '+' : ''}${slope.toFixed(2)} WPM per bucket step).`;
+    }
+  } else if (utteranceCount < 3) {
     if (wpmVariance > 900) {
       consistencyLabel = 'moderate';
       consistencyExplanation = `Variance is elevated (${wpmVariance.toFixed(0)}), but with fewer than three utterances this is only moderately informative—not enough data to label delivery as unstable.`;
@@ -218,6 +277,10 @@ export function generateCoachFeedback(
   } else {
     consistencyLabel = 'unstable';
     consistencyExplanation = `Large swings between faster and slower phrases (variance ${wpmVariance.toFixed(0)}), which often reads as nervous or uneven delivery.`;
+  }
+
+  if (!usingBucketModel && bucketCv !== null && bucketCount > 0 && bucketCount < 3) {
+    consistencyExplanation += ` Timing buckets are limited (${bucketCount}); bucket CV ${bucketCv.toFixed(2)} is indicative only. Low sample size, interpret cautiously.`;
   }
 
   let pacingSentence: string;
