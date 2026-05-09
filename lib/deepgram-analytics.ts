@@ -22,16 +22,23 @@ export type UtteranceAnalytics = {
   speakingRateWpm: number;
 };
 
-/** Timeline bucket pacing consistency (preferred over utterance-based variance). */
+/** Sliding word-window pacing sample (flat words channel, sorted by start). */
+export type PacingWindowPoint = {
+  midTime: number;
+  wpm: number;
+};
+
+export type PacingShape =
+  | 'steady'
+  | 'accelerating'
+  | 'decelerating'
+  | 'strong-start'
+  | 'strong-finish'
+  | 'wave';
+
 export type DeepgramConsistency = {
-  bucketWindowSeconds: number;
-  bucketCount: number;
-  bucketWpmMean: number | null;
-  bucketWpmStdDev: number | null;
-  bucketWpmCv: number | null;
-  pacingTrendSlope: number | null;
-  /** WPM samples at bucket start times (seconds from speech onset), for pacing charts. */
-  bucketChartPoints: { timeSeconds: number; wpm: number }[];
+  pacingWindows: PacingWindowPoint[];
+  pacingShape: PacingShape | null;
 };
 
 export type DeepgramAnalytics = {
@@ -46,7 +53,7 @@ export type DeepgramAnalytics = {
   speakingRateWpm: number;
   utterances: UtteranceAnalytics[];
   averageUtteranceWpm: number;
-  /** @deprecated Legacy: population variance of per-utterance WPM — driven by segmentation, not rhythm. Prefer `consistency`. */
+  /** @deprecated Legacy: population variance of per-utterance WPM — driven by segmentation, not rhythm. Prefer `consistency.pacingWindows`. */
   wpmVariance: number;
   consistency: DeepgramConsistency;
 };
@@ -78,13 +85,8 @@ function isValidWord(w: unknown): w is DeepgramWord {
 
 function emptyConsistency(): DeepgramConsistency {
   return {
-    bucketWindowSeconds: 0,
-    bucketCount: 0,
-    bucketWpmMean: null,
-    bucketWpmStdDev: null,
-    bucketWpmCv: null,
-    pacingTrendSlope: null,
-    bucketChartPoints: [],
+    pacingWindows: [],
+    pacingShape: null,
   };
 }
 
@@ -106,131 +108,132 @@ function emptyAnalytics(): DeepgramAnalytics {
   };
 }
 
-/** Midpoint-assignment buckets over [speechStart, speechEnd]. Only non-empty (≥1 word) buckets produce WPM values. */
-function computeBucketConsistency(params: {
-  speechStart: number;
-  speechEnd: number;
-  validWords: DeepgramWord[];
-  totalSpeechSeconds: number;
-  wordCount: number;
-}): DeepgramConsistency {
-  const { speechStart, speechEnd, validWords, totalSpeechSeconds, wordCount } =
-    params;
+function slidingWindowParams(totalWords: number): {
+  windowSize: number;
+  step: number;
+} {
+  if (totalWords < 50) {
+    return { windowSize: 8, step: 3 };
+  }
+  if (totalWords <= 150) {
+    return { windowSize: 15, step: 5 };
+  }
+  return { windowSize: 20, step: 7 };
+}
 
-  if (
-    totalSpeechSeconds < 8 ||
-    wordCount < 10 ||
-    !Number.isFinite(speechStart) ||
-    !Number.isFinite(speechEnd) ||
-    speechEnd <= speechStart
-  ) {
-    return emptyConsistency();
+function avg(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  let s = 0;
+  for (const n of nums) {
+    s += n;
+  }
+  return s / nums.length;
+}
+
+/**
+ * Thirds-based pacing shape from overlapping window WPM series (chronological).
+ */
+export function classifyPacingShape(wpms: number[]): PacingShape | null {
+  const n = wpms.length;
+  if (n < 3) {
+    return null;
   }
 
-  const timelineSeconds = speechEnd - speechStart;
-  const bucketWindowSeconds = timelineSeconds < 20 ? 3 : 5;
+  const t = Math.floor(n / 3);
+  const i1 = Math.max(1, t);
+  const i2 = Math.max(i1 + 1, t * 2);
+  const segStart = wpms.slice(0, i1);
+  const segMid = wpms.slice(i1, i2);
+  const segEnd = wpms.slice(i2);
 
-  const bucketWpmValues: number[] = [];
-  const bucketChartPoints: { timeSeconds: number; wpm: number }[] = [];
+  const S = avg(segStart);
+  const M = avg(segMid.length > 0 ? segMid : wpms.slice(i1, i1 + 1));
+  const E = avg(segEnd.length > 0 ? segEnd : wpms.slice(n - 1));
 
-  for (let i = 0; ; i++) {
-    const bStart = speechStart + i * bucketWindowSeconds;
-    if (bStart >= speechEnd) break;
-    const bEnd = Math.min(bStart + bucketWindowSeconds, speechEnd);
-    const bucketDurationSeconds = bEnd - bStart;
-    if (bucketDurationSeconds <= 0 || !Number.isFinite(bucketDurationSeconds)) {
+  const meanAll = (S + M + E) / 3;
+  const tol = Math.max(12, meanAll * 0.07);
+
+  const hi = Math.max(S, M, E);
+  const lo = Math.min(S, M, E);
+  if (hi - lo < tol) {
+    return 'steady';
+  }
+
+  if (M >= S + tol && M >= E + tol) {
+    return 'wave';
+  }
+  if (M <= S - tol && M <= E - tol) {
+    return 'wave';
+  }
+
+  if (S >= E + tol && S >= M - tol * 0.5) {
+    return 'strong-start';
+  }
+  if (E >= S + tol && E >= M - tol * 0.5) {
+    return 'strong-finish';
+  }
+
+  if (S + tol < M && M + tol < E) {
+    return 'accelerating';
+  }
+  if (S > M + tol && M > E + tol) {
+    return 'decelerating';
+  }
+
+  return 'steady';
+}
+
+function computePacingWindows(validWords: DeepgramWord[]): PacingWindowPoint[] {
+  const sortedWords = [...validWords].sort((a, b) => a.start - b.start);
+  const totalWords = sortedWords.length;
+  const { windowSize, step } = slidingWindowParams(totalWords);
+
+  if (totalWords < windowSize) {
+    return [];
+  }
+
+  const out: PacingWindowPoint[] = [];
+
+  for (let start = 0; start + windowSize <= totalWords; start += step) {
+    const windowSlice = sortedWords.slice(start, start + windowSize);
+    const firstWord = windowSlice[0]!;
+    const lastWord = windowSlice[windowSlice.length - 1]!;
+    const durationSeconds = lastWord.end - firstWord.start;
+
+    if (
+      durationSeconds <= 0 ||
+      !Number.isFinite(durationSeconds) ||
+      !Number.isFinite(firstWord.start) ||
+      !Number.isFinite(lastWord.end)
+    ) {
       continue;
     }
 
-    let wordsInBucket = 0;
-    for (const w of validWords) {
-      const mid = (w.start + w.end) / 2;
-      if (mid >= bStart && mid < bEnd) {
-        wordsInBucket += 1;
-      }
-    }
+    const wpm = (windowSlice.length / durationSeconds) * 60;
+    const midTime = (firstWord.start + lastWord.end) / 2;
 
-    if (wordsInBucket === 0) continue;
-
-    const bucketWpm = (wordsInBucket / bucketDurationSeconds) * 60;
-    const wpmRounded = round2(bucketWpm);
-    bucketWpmValues.push(wpmRounded);
-    bucketChartPoints.push({
-      timeSeconds: round2(i * bucketWindowSeconds),
-      wpm: wpmRounded,
+    out.push({
+      midTime: round2(midTime),
+      wpm: round2(wpm),
     });
   }
 
-  const bucketCount = bucketWpmValues.length;
+  out.sort((a, b) => a.midTime - b.midTime);
+  return out;
+}
 
-  let bucketWpmMean: number | null = null;
-  let bucketWpmStdDev: number | null = null;
-  let bucketWpmCv: number | null = null;
-  let pacingTrendSlope: number | null = null;
-
-  if (bucketCount === 0) {
-    return {
-      bucketWindowSeconds,
-      bucketCount: 0,
-      bucketWpmMean: null,
-      bucketWpmStdDev: null,
-      bucketWpmCv: null,
-      pacingTrendSlope: null,
-      bucketChartPoints: [],
-    };
+function computePacingConsistency(validWords: DeepgramWord[]): DeepgramConsistency {
+  const pacingWindows = computePacingWindows(validWords);
+  if (pacingWindows.length === 0) {
+    return emptyConsistency();
   }
 
-  let sumBucket = 0;
-  for (let j = 0; j < bucketCount; j++) {
-    sumBucket += bucketWpmValues[j]!;
-  }
-  const meanBucket = sumBucket / bucketCount;
-  bucketWpmMean = round2(meanBucket);
-
-  let sumSqDev = 0;
-  for (let j = 0; j < bucketCount; j++) {
-    const d = bucketWpmValues[j]! - meanBucket;
-    sumSqDev += d * d;
-  }
-  const variancePop = sumSqDev / bucketCount;
-  const stdBucket = Math.sqrt(variancePop);
-  bucketWpmStdDev = round2(stdBucket);
-
-  if (meanBucket <= 0) {
-    bucketWpmCv = null;
-  } else {
-    bucketWpmCv = round2(stdBucket / meanBucket);
-  }
-
-  if (bucketCount >= 3) {
-    let sumX = 0;
-    let sumY = 0;
-    let sumXY = 0;
-    let sumX2 = 0;
-    const nSlope = bucketCount;
-    for (let x = 0; x < nSlope; x++) {
-      const y = bucketWpmValues[x]!;
-      sumX += x;
-      sumY += y;
-      sumXY += x * y;
-      sumX2 += x * x;
-    }
-    const denom = nSlope * sumX2 - sumX * sumX;
-    if (Math.abs(denom) < 1e-12) {
-      pacingTrendSlope = round2(0);
-    } else {
-      pacingTrendSlope = round2((nSlope * sumXY - sumX * sumY) / denom);
-    }
-  }
+  const wpms = pacingWindows.map((p) => p.wpm);
+  const pacingShape = classifyPacingShape(wpms);
 
   return {
-    bucketWindowSeconds,
-    bucketCount,
-    bucketWpmMean,
-    bucketWpmStdDev,
-    bucketWpmCv,
-    pacingTrendSlope,
-    bucketChartPoints,
+    pacingWindows,
+    pacingShape,
   };
 }
 
@@ -352,13 +355,7 @@ export function analyzeDeepgramSpeech(options: {
     wpmVariance = round2(sumSquaredDeviation / nUtterances);
   }
 
-  const consistency = computeBucketConsistency({
-    speechStart: first.start,
-    speechEnd: last.end,
-    validWords,
-    totalSpeechSeconds,
-    wordCount,
-  });
+  const consistency = computePacingConsistency(validWords);
 
   return {
     pauseCount,
@@ -376,3 +373,52 @@ export function analyzeDeepgramSpeech(options: {
     consistency,
   };
 }
+
+/** Population CV of window WPMs — used by coach for variance scoring. */
+export function pacingWindowsCv(windows: PacingWindowPoint[]): number | null {
+  const values = windows.map((w) => w.wpm);
+  if (values.length < 3) {
+    return null;
+  }
+  let sum = 0;
+  for (const v of values) {
+    sum += v;
+  }
+  const mean = sum / values.length;
+  if (mean <= 0 || !Number.isFinite(mean)) {
+    return null;
+  }
+  let sumSq = 0;
+  for (const v of values) {
+    const d = v - mean;
+    sumSq += d * d;
+  }
+  const std = Math.sqrt(sumSq / values.length);
+  return round2(std / mean);
+}
+
+/** Linear slope of WPM vs. window index (for tempo-change penalty in coach). */
+export function pacingWindowsTrendSlope(windows: PacingWindowPoint[]): number | null {
+  const yValues = windows.map((w) => w.wpm);
+  const n = yValues.length;
+  if (n < 3) {
+    return null;
+  }
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumX2 = 0;
+  for (let x = 0; x < n; x++) {
+    const y = yValues[x]!;
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  }
+  const denom = n * sumX2 - sumX * sumX;
+  if (Math.abs(denom) < 1e-12) {
+    return round2(0);
+  }
+  return round2((n * sumXY - sumX * sumY) / denom);
+}
+

@@ -1,4 +1,8 @@
-import type { DeepgramAnalytics } from './deepgram-analytics';
+import {
+  type DeepgramAnalytics,
+  pacingWindowsCv,
+  pacingWindowsTrendSlope,
+} from './deepgram-analytics';
 
 export type DeepgramCoachFeedback = {
   overallScore: number;
@@ -29,7 +33,7 @@ function finiteOrZero(n: number): number {
 
 type DominantCategory = 'pauses' | 'pacing' | 'consistency';
 
-/** Semantic buckets so equivalent tips are not duplicated (keyword-style, not ML). */
+/** Semantic categories so equivalent tips are not duplicated (keyword-style, not ML). */
 type SuggestionIntent =
   | 'long_pause_planning'
   | 'filler_pause'
@@ -135,30 +139,21 @@ export function generateCoachFeedback(
     : 0;
 
   const consistencyBlock = analytics.consistency;
-  const bucketCv =
-    consistencyBlock?.bucketWpmCv === null ||
-    consistencyBlock?.bucketWpmCv === undefined ||
-    typeof consistencyBlock.bucketWpmCv !== 'number' ||
-    !Number.isFinite(consistencyBlock.bucketWpmCv)
-      ? null
-      : consistencyBlock.bucketWpmCv;
-  const slope =
-    consistencyBlock?.pacingTrendSlope === null ||
-    consistencyBlock?.pacingTrendSlope === undefined ||
-    typeof consistencyBlock.pacingTrendSlope !== 'number' ||
-    !Number.isFinite(consistencyBlock.pacingTrendSlope)
-      ? null
-      : consistencyBlock.pacingTrendSlope;
-  const bucketCount = finiteOrZero(consistencyBlock?.bucketCount ?? 0);
+  const pacingWindows = Array.isArray(consistencyBlock?.pacingWindows)
+    ? consistencyBlock.pacingWindows
+    : [];
+  const windowCv = pacingWindowsCv(pacingWindows);
+  const slope = pacingWindowsTrendSlope(pacingWindows);
+  const windowCount = pacingWindows.length;
 
-  const usingBucketModel = bucketCv !== null && bucketCount >= 3;
+  const usingWindowModel = windowCv !== null && windowCount >= 3;
 
   console.log('[deepgram] consistency debug', {
-    bucketCv,
+    windowCv,
     slope,
-    bucketCount,
+    windowCount,
     legacyVariance,
-    usingBucketModel,
+    usingWindowModel,
   });
 
   // pauseCount / longPauseCount: used ONLY below for pauseScore (single source for pause penalties)
@@ -175,10 +170,10 @@ export function generateCoachFeedback(
   const pauseScore = Math.min(35, pauseBandDeduction + longPauseComponent);
 
   let varianceScore = 0;
-  if (usingBucketModel && bucketCv !== null) {
-    if (bucketCv < 0.15) {
+  if (usingWindowModel && windowCv !== null) {
+    if (windowCv < 0.15) {
       varianceScore = 0;
-    } else if (bucketCv <= 0.35) {
+    } else if (windowCv <= 0.35) {
       varianceScore = 5;
     } else {
       varianceScore = 12;
@@ -239,23 +234,23 @@ export function generateCoachFeedback(
   let consistencyLabel: DeepgramCoachFeedback['consistency']['label'];
   let consistencyExplanation: string;
 
-  if (usingBucketModel && bucketCv !== null) {
-    if (bucketCv < 0.15) {
+  if (usingWindowModel && windowCv !== null) {
+    if (windowCv < 0.15) {
       consistencyLabel = 'stable';
-      consistencyExplanation = `Bucket-based pacing is fairly steady across the timeline (CV ${bucketCv.toFixed(2)} across ${bucketCount} buckets).`;
-    } else if (bucketCv <= 0.35) {
+      consistencyExplanation = `Overlapping word-window pacing is fairly steady through the answer (CV ${windowCv.toFixed(2)} across ${windowCount} samples).`;
+    } else if (windowCv <= 0.35) {
       consistencyLabel = 'moderate';
-      consistencyExplanation = `Moderate pacing spread between time buckets (CV ${bucketCv.toFixed(2)} across ${bucketCount} buckets); delivery should still feel acceptable.`;
+      consistencyExplanation = `Moderate pacing variation across sliding windows (CV ${windowCv.toFixed(2)} across ${windowCount} samples); delivery should still feel acceptable.`;
     } else {
       consistencyLabel = 'unstable';
-      consistencyExplanation = `Pacing swings strongly between timeline buckets (CV ${bucketCv.toFixed(2)} across ${bucketCount} buckets), which tends to sound uneven.`;
+      consistencyExplanation = `Pacing swings strongly across overlapping windows (CV ${windowCv.toFixed(2)} across ${windowCount} samples), which tends to sound uneven.`;
     }
     if (
       slope !== null &&
       Number.isFinite(slope) &&
       Math.abs(slope) > 8
     ) {
-      consistencyExplanation += ` Rapid change in tempo over time is also evident (trend slope ${slope >= 0 ? '+' : ''}${slope.toFixed(2)} WPM per bucket step).`;
+      consistencyExplanation += ` Rapid change in tempo over time is also evident (trend slope ${slope >= 0 ? '+' : ''}${slope.toFixed(2)} WPM per window step).`;
     }
   } else if (utteranceCount < 3) {
     if (wpmVariance > 900) {
@@ -279,8 +274,12 @@ export function generateCoachFeedback(
     consistencyExplanation = `Large swings between faster and slower phrases (variance ${wpmVariance.toFixed(0)}), which often reads as nervous or uneven delivery.`;
   }
 
-  if (!usingBucketModel && bucketCv !== null && bucketCount > 0 && bucketCount < 3) {
-    consistencyExplanation += ` Timing buckets are limited (${bucketCount}); bucket CV ${bucketCv.toFixed(2)} is indicative only. Low sample size, interpret cautiously.`;
+  if (
+    !usingWindowModel &&
+    pacingWindows.length > 0 &&
+    pacingWindows.length < 3
+  ) {
+    consistencyExplanation += ` Few overlapping word windows (${pacingWindows.length}); pacing variability estimates are directional only.`;
   }
 
   let pacingSentence: string;

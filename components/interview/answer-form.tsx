@@ -6,7 +6,7 @@ import {
   analyzePausesFromSamples,
   type PauseMetrics,
 } from '@/lib/pause-analysis';
-import type { DeepgramAnalytics } from '@/lib/deepgram-analytics';
+import type { DeepgramAnalytics, PacingShape } from '@/lib/deepgram-analytics';
 import { SpeakingPaceOverTimeChart } from '@/components/interview/speaking-pace-over-time-chart';
 
 const CHIP_POSITIVE =
@@ -63,35 +63,59 @@ function speakingPaceDisplay(wpm: number): {
   };
 }
 
-function pacingTrendDisplay(slope: number | null): {
-  label: 'Stable' | 'Accelerating' | 'Decelerating';
+function pacingShapeDisplay(shape: PacingShape | null): {
+  label: string;
   helper: string;
   chipClass: string;
 } | null {
-  if (slope === null || typeof slope !== 'number' || !Number.isFinite(slope)) {
+  if (shape === null) {
     return null;
   }
-  if (slope > 0.75) {
-    return {
-      label: 'Accelerating',
-      helper:
-        'You sped up as you went, which can read as nervousness.',
-      chipClass: CHIP_CAUTION,
-    };
+  switch (shape) {
+    case 'steady':
+      return {
+        label: 'Stable',
+        helper: 'You maintained a consistent pace throughout.',
+        chipClass: CHIP_POSITIVE,
+      };
+    case 'accelerating':
+      return {
+        label: 'Accelerating',
+        helper:
+          'You sped up as you went, which can read as nervousness.',
+        chipClass: CHIP_CAUTION,
+      };
+    case 'decelerating':
+      return {
+        label: 'Decelerating',
+        helper:
+          "You slowed toward the end — check you're not losing confidence.",
+        chipClass: CHIP_CAUTION,
+      };
+    case 'strong-start':
+      return {
+        label: 'Strong start',
+        helper:
+          'Energy was higher early than late — consider a more even arc.',
+        chipClass: CHIP_CAUTION,
+      };
+    case 'strong-finish':
+      return {
+        label: 'Strong finish',
+        helper:
+          'You built momentum toward the end — keep transitions smooth.',
+        chipClass: CHIP_POSITIVE,
+      };
+    case 'wave':
+      return {
+        label: 'Wave pattern',
+        helper:
+          'Pace varied across the middle vs. ends — steadier delivery often lands better.',
+        chipClass: CHIP_CAUTION,
+      };
+    default:
+      return null;
   }
-  if (slope < -0.75) {
-    return {
-      label: 'Decelerating',
-      helper:
-        "You slowed toward the end — check you're not losing confidence.",
-      chipClass: CHIP_CAUTION,
-    };
-  }
-  return {
-    label: 'Stable',
-    helper: 'You maintained a consistent pace throughout.',
-    chipClass: CHIP_POSITIVE,
-  };
 }
 
 function activeSpeechDisplay(ratio: number): {
@@ -542,13 +566,13 @@ export function AnswerForm({
             const wpmHeadline = wpmFinite
               ? `${Math.round(analytics.speakingRateWpm)} WPM`
               : '—';
-            const trend = pacingTrendDisplay(
-              analytics.consistency?.pacingTrendSlope ?? null,
+            const trend = pacingShapeDisplay(
+              analytics.consistency?.pacingShape ?? null,
             );
             const speech = activeSpeechDisplay(analytics.speechRatio);
             const paceOverTimeData =
-              analytics.consistency.bucketChartPoints.map((p) => ({
-                time: p.timeSeconds,
+              analytics.consistency.pacingWindows.map((p) => ({
+                time: p.midTime,
                 wpm: p.wpm,
               }));
 
