@@ -30,6 +30,8 @@ export type DeepgramConsistency = {
   bucketWpmStdDev: number | null;
   bucketWpmCv: number | null;
   pacingTrendSlope: number | null;
+  /** WPM samples at bucket start times (seconds from speech onset), for pacing charts. */
+  bucketChartPoints: { timeSeconds: number; wpm: number }[];
 };
 
 export type DeepgramAnalytics = {
@@ -82,6 +84,7 @@ function emptyConsistency(): DeepgramConsistency {
     bucketWpmStdDev: null,
     bucketWpmCv: null,
     pacingTrendSlope: null,
+    bucketChartPoints: [],
   };
 }
 
@@ -128,6 +131,7 @@ function computeBucketConsistency(params: {
   const bucketWindowSeconds = timelineSeconds < 20 ? 3 : 5;
 
   const bucketWpmValues: number[] = [];
+  const bucketChartPoints: { timeSeconds: number; wpm: number }[] = [];
 
   for (let i = 0; ; i++) {
     const bStart = speechStart + i * bucketWindowSeconds;
@@ -149,7 +153,12 @@ function computeBucketConsistency(params: {
     if (wordsInBucket === 0) continue;
 
     const bucketWpm = (wordsInBucket / bucketDurationSeconds) * 60;
-    bucketWpmValues.push(round2(bucketWpm));
+    const wpmRounded = round2(bucketWpm);
+    bucketWpmValues.push(wpmRounded);
+    bucketChartPoints.push({
+      timeSeconds: round2(i * bucketWindowSeconds),
+      wpm: wpmRounded,
+    });
   }
 
   const bucketCount = bucketWpmValues.length;
@@ -167,6 +176,7 @@ function computeBucketConsistency(params: {
       bucketWpmStdDev: null,
       bucketWpmCv: null,
       pacingTrendSlope: null,
+      bucketChartPoints: [],
     };
   }
 
@@ -220,6 +230,7 @@ function computeBucketConsistency(params: {
     bucketWpmStdDev,
     bucketWpmCv,
     pacingTrendSlope,
+    bucketChartPoints,
   };
 }
 

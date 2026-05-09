@@ -7,6 +7,7 @@ import {
   type PauseMetrics,
 } from '@/lib/pause-analysis';
 import type { DeepgramAnalytics } from '@/lib/deepgram-analytics';
+import { SpeakingPaceOverTimeChart } from '@/components/interview/speaking-pace-over-time-chart';
 
 const CHIP_POSITIVE =
   'border-emerald-500/55 bg-emerald-500/15 text-emerald-950 dark:border-emerald-400/45 dark:bg-emerald-500/20 dark:text-emerald-50';
@@ -545,9 +546,15 @@ export function AnswerForm({
               analytics.consistency?.pacingTrendSlope ?? null,
             );
             const speech = activeSpeechDisplay(analytics.speechRatio);
+            const paceOverTimeData =
+              analytics.consistency.bucketChartPoints.map((p) => ({
+                time: p.timeSeconds,
+                wpm: p.wpm,
+              }));
 
             return (
-              <div className="mt-4 space-y-6">
+              <>
+                <div className="mt-4 space-y-6">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
                       Speaking pace
@@ -614,6 +621,8 @@ export function AnswerForm({
                     ) : null}
                   </div>
                 </div>
+                <SpeakingPaceOverTimeChart data={paceOverTimeData} />
+              </>
             );
           })()}
         </section>
