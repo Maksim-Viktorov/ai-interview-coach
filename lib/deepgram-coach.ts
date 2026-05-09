@@ -1,7 +1,6 @@
 import {
   type DeepgramAnalytics,
   pacingWindowsCv,
-  pacingWindowsTrendSlope,
 } from './deepgram-analytics';
 
 export type DeepgramCoachFeedback = {
@@ -142,8 +141,14 @@ export function generateCoachFeedback(
   const pacingWindows = Array.isArray(consistencyBlock?.pacingWindows)
     ? consistencyBlock.pacingWindows
     : [];
+  const pacingAnalysis = consistencyBlock?.pacingAnalysis;
   const windowCv = pacingWindowsCv(pacingWindows);
-  const slope = pacingWindowsTrendSlope(pacingWindows);
+  const slope =
+    pacingAnalysis &&
+    typeof pacingAnalysis.trendSlope === 'number' &&
+    Number.isFinite(pacingAnalysis.trendSlope)
+      ? pacingAnalysis.trendSlope
+      : 0;
   const windowCount = pacingWindows.length;
 
   const usingWindowModel = windowCv !== null && windowCount >= 3;
@@ -178,7 +183,7 @@ export function generateCoachFeedback(
     } else {
       varianceScore = 12;
     }
-    if (slope !== null && Math.abs(slope) > 8) {
+    if (Math.abs(slope) > 8) {
       varianceScore += 5;
     }
   } else {
@@ -245,11 +250,7 @@ export function generateCoachFeedback(
       consistencyLabel = 'unstable';
       consistencyExplanation = `Pacing swings strongly across overlapping windows (CV ${windowCv.toFixed(2)} across ${windowCount} samples), which tends to sound uneven.`;
     }
-    if (
-      slope !== null &&
-      Number.isFinite(slope) &&
-      Math.abs(slope) > 8
-    ) {
+    if (Number.isFinite(slope) && Math.abs(slope) > 8) {
       consistencyExplanation += ` Rapid change in tempo over time is also evident (trend slope ${slope >= 0 ? '+' : ''}${slope.toFixed(2)} WPM per window step).`;
     }
   } else if (utteranceCount < 3) {
@@ -275,11 +276,11 @@ export function generateCoachFeedback(
   }
 
   if (
-    !usingWindowModel &&
+    pacingAnalysis?.shape === 'insufficient' &&
     pacingWindows.length > 0 &&
-    pacingWindows.length < 3
+    pacingWindows.length < 5
   ) {
-    consistencyExplanation += ` Few overlapping word windows (${pacingWindows.length}); pacing variability estimates are directional only.`;
+    consistencyExplanation += ` Few overlapping word windows (${pacingWindows.length}); full pacing analysis needs more samples.`;
   }
 
   let pacingSentence: string;

@@ -28,17 +28,31 @@ export type PacingWindowPoint = {
   wpm: number;
 };
 
-export type PacingShape =
-  | 'steady'
-  | 'accelerating'
-  | 'decelerating'
-  | 'strong-start'
-  | 'strong-finish'
-  | 'wave';
+export type PacingAnalysis = {
+  shape:
+    | 'steady'
+    | 'accelerating'
+    | 'decelerating'
+    | 'strong-start'
+    | 'strong-finish'
+    | 'wave'
+    | 'erratic'
+    | 'insufficient';
+  trendSlope: number;
+  lrv: number;
+  fluencyScore: number;
+  peakCount: number;
+  valleyCount: number;
+  peakLocations: number[];
+  valleyLocations: number[];
+  openingWpm: number;
+  closingWpm: number;
+  openingToClosingDrift: number;
+};
 
 export type DeepgramConsistency = {
   pacingWindows: PacingWindowPoint[];
-  pacingShape: PacingShape | null;
+  pacingAnalysis: PacingAnalysis;
 };
 
 export type DeepgramAnalytics = {
@@ -83,10 +97,26 @@ function isValidWord(w: unknown): w is DeepgramWord {
   return start <= end;
 }
 
+function insufficientPacingAnalysis(): PacingAnalysis {
+  return {
+    shape: 'insufficient',
+    trendSlope: 0,
+    lrv: 0,
+    fluencyScore: 0,
+    peakCount: 0,
+    valleyCount: 0,
+    peakLocations: [],
+    valleyLocations: [],
+    openingWpm: 0,
+    closingWpm: 0,
+    openingToClosingDrift: 0,
+  };
+}
+
 function emptyConsistency(): DeepgramConsistency {
   return {
     pacingWindows: [],
-    pacingShape: null,
+    pacingAnalysis: insufficientPacingAnalysis(),
   };
 }
 
@@ -130,57 +160,122 @@ function avg(nums: number[]): number {
   return s / nums.length;
 }
 
-/**
- * Thirds-based pacing shape from overlapping window WPM series (chronological).
- */
-export function classifyPacingShape(wpms: number[]): PacingShape | null {
+function regressionSlopeWpmPerIndex(wpms: number[]): number {
   const n = wpms.length;
-  if (n < 3) {
-    return null;
+  if (n < 2) {
+    return 0;
+  }
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumX2 = 0;
+  for (let x = 0; x < n; x++) {
+    const y = wpms[x]!;
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  }
+  const denom = n * sumX2 - sumX * sumX;
+  if (Math.abs(denom) < 1e-12) {
+    return round2(0);
+  }
+  return round2((n * sumXY - sumX * sumY) / denom);
+}
+
+/**
+ * Full pacing curve analysis from chronological sliding-window samples.
+ */
+export function analyzePacingCurve(
+  dataPoints: PacingWindowPoint[],
+): PacingAnalysis {
+  if (dataPoints.length < 5) {
+    return insufficientPacingAnalysis();
   }
 
-  const t = Math.floor(n / 3);
-  const i1 = Math.max(1, t);
-  const i2 = Math.max(i1 + 1, t * 2);
-  const segStart = wpms.slice(0, i1);
-  const segMid = wpms.slice(i1, i2);
-  const segEnd = wpms.slice(i2);
+  const wpms = dataPoints.map((p) => p.wpm);
+  const n = wpms.length;
 
-  const S = avg(segStart);
-  const M = avg(segMid.length > 0 ? segMid : wpms.slice(i1, i1 + 1));
-  const E = avg(segEnd.length > 0 ? segEnd : wpms.slice(n - 1));
+  const trendSlope = regressionSlopeWpmPerIndex(wpms);
 
-  const meanAll = (S + M + E) / 3;
-  const tol = Math.max(12, meanAll * 0.07);
+  let sumAdjDiff = 0;
+  let adjCount = 0;
+  for (let i = 0; i < n - 1; i++) {
+    sumAdjDiff += Math.abs(wpms[i + 1]! - wpms[i]!);
+    adjCount += 1;
+  }
+  const lrvRaw = adjCount > 0 ? sumAdjDiff / adjCount : 0;
+  const lrv = round2(lrvRaw);
 
-  const hi = Math.max(S, M, E);
-  const lo = Math.min(S, M, E);
-  if (hi - lo < tol) {
-    return 'steady';
+  const fluencyScore = Math.round(Math.max(0, (1 - lrvRaw / 40) * 100));
+
+  const peakLocations: number[] = [];
+  const valleyLocations: number[] = [];
+  for (let i = 1; i <= n - 2; i++) {
+    const w = wpms[i]!;
+    const prev = wpms[i - 1]!;
+    const next = wpms[i + 1]!;
+    if (
+      w > prev &&
+      w > next &&
+      Math.abs(w - prev) > 15 &&
+      Math.abs(w - next) > 15
+    ) {
+      peakLocations.push(round2(dataPoints[i]!.midTime));
+    }
+    if (
+      w < prev &&
+      w < next &&
+      Math.abs(w - prev) > 15 &&
+      Math.abs(w - next) > 15
+    ) {
+      valleyLocations.push(round2(dataPoints[i]!.midTime));
+    }
+  }
+  const peakCount = peakLocations.length;
+  const valleyCount = valleyLocations.length;
+
+  const headLen = Math.max(1, Math.round(n * 0.2));
+  const tailLen = Math.max(1, Math.round(n * 0.2));
+  const openingWpm = round2(avg(wpms.slice(0, headLen)));
+  const closingWpm = round2(avg(wpms.slice(-tailLen)));
+  const openingToClosingDrift = round2(closingWpm - openingWpm);
+
+  let shape: PacingAnalysis['shape'];
+  if (peakCount >= 2 && valleyCount >= 2) {
+    shape = 'wave';
+  } else if (lrv > 25) {
+    shape = 'erratic';
+  } else if (
+    Math.abs(openingToClosingDrift) < 10 &&
+    lrv < 15
+  ) {
+    shape = 'steady';
+  } else if (openingToClosingDrift > 15 && trendSlope > 0) {
+    shape = 'accelerating';
+  } else if (openingToClosingDrift < -15 && trendSlope < 0) {
+    shape = 'decelerating';
+  } else if (openingWpm > closingWpm + 20) {
+    shape = 'strong-start';
+  } else if (closingWpm > openingWpm + 20) {
+    shape = 'strong-finish';
+  } else {
+    shape = 'steady';
   }
 
-  if (M >= S + tol && M >= E + tol) {
-    return 'wave';
-  }
-  if (M <= S - tol && M <= E - tol) {
-    return 'wave';
-  }
-
-  if (S >= E + tol && S >= M - tol * 0.5) {
-    return 'strong-start';
-  }
-  if (E >= S + tol && E >= M - tol * 0.5) {
-    return 'strong-finish';
-  }
-
-  if (S + tol < M && M + tol < E) {
-    return 'accelerating';
-  }
-  if (S > M + tol && M > E + tol) {
-    return 'decelerating';
-  }
-
-  return 'steady';
+  return {
+    shape,
+    trendSlope,
+    lrv,
+    fluencyScore,
+    peakCount,
+    valleyCount,
+    peakLocations,
+    valleyLocations,
+    openingWpm,
+    closingWpm,
+    openingToClosingDrift,
+  };
 }
 
 function computePacingWindows(validWords: DeepgramWord[]): PacingWindowPoint[] {
@@ -228,12 +323,11 @@ function computePacingConsistency(validWords: DeepgramWord[]): DeepgramConsisten
     return emptyConsistency();
   }
 
-  const wpms = pacingWindows.map((p) => p.wpm);
-  const pacingShape = classifyPacingShape(wpms);
+  const pacingAnalysis = analyzePacingCurve(pacingWindows);
 
   return {
     pacingWindows,
-    pacingShape,
+    pacingAnalysis,
   };
 }
 
@@ -396,29 +490,3 @@ export function pacingWindowsCv(windows: PacingWindowPoint[]): number | null {
   const std = Math.sqrt(sumSq / values.length);
   return round2(std / mean);
 }
-
-/** Linear slope of WPM vs. window index (for tempo-change penalty in coach). */
-export function pacingWindowsTrendSlope(windows: PacingWindowPoint[]): number | null {
-  const yValues = windows.map((w) => w.wpm);
-  const n = yValues.length;
-  if (n < 3) {
-    return null;
-  }
-  let sumX = 0;
-  let sumY = 0;
-  let sumXY = 0;
-  let sumX2 = 0;
-  for (let x = 0; x < n; x++) {
-    const y = yValues[x]!;
-    sumX += x;
-    sumY += y;
-    sumXY += x * y;
-    sumX2 += x * x;
-  }
-  const denom = n * sumX2 - sumX * sumX;
-  if (Math.abs(denom) < 1e-12) {
-    return round2(0);
-  }
-  return round2((n * sumXY - sumX * sumY) / denom);
-}
-

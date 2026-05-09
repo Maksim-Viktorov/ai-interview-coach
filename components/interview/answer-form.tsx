@@ -6,7 +6,7 @@ import {
   analyzePausesFromSamples,
   type PauseMetrics,
 } from '@/lib/pause-analysis';
-import type { DeepgramAnalytics, PacingShape } from '@/lib/deepgram-analytics';
+import type { DeepgramAnalytics, PacingAnalysis } from '@/lib/deepgram-analytics';
 import { SpeakingPaceOverTimeChart } from '@/components/interview/speaking-pace-over-time-chart';
 
 const CHIP_POSITIVE =
@@ -63,15 +63,14 @@ function speakingPaceDisplay(wpm: number): {
   };
 }
 
-function pacingShapeDisplay(shape: PacingShape | null): {
+function pacingAnalysisShapeDisplay(shape: PacingAnalysis['shape']): {
   label: string;
   helper: string;
   chipClass: string;
 } | null {
-  if (shape === null) {
-    return null;
-  }
   switch (shape) {
+    case 'insufficient':
+      return null;
     case 'steady':
       return {
         label: 'Stable',
@@ -113,9 +112,60 @@ function pacingShapeDisplay(shape: PacingShape | null): {
           'Pace varied across the middle vs. ends — steadier delivery often lands better.',
         chipClass: CHIP_CAUTION,
       };
+    case 'erratic':
+      return {
+        label: 'Erratic',
+        helper:
+          'Your pace varied unpredictably throughout — focus on steadying your delivery',
+        chipClass: CHIP_ATTENTION,
+      };
     default:
       return null;
   }
+}
+
+function fluencyScoreDisplay(analysis: PacingAnalysis): {
+  headline: string;
+  label: string;
+  comment: string;
+  chipClass: string;
+} | null {
+  if (analysis.shape === 'insufficient') {
+    return null;
+  }
+  const s = analysis.fluencyScore;
+  const headline = String(Math.round(s));
+  if (s >= 85) {
+    return {
+      headline,
+      label: 'Excellent',
+      comment: 'Smooth, natural transitions throughout',
+      chipClass: CHIP_POSITIVE,
+    };
+  }
+  if (s >= 70) {
+    return {
+      headline,
+      label: 'Good',
+      comment: 'Mostly fluid with minor variation',
+      chipClass: CHIP_POSITIVE,
+    };
+  }
+  if (s >= 50) {
+    return {
+      headline,
+      label: 'Moderate',
+      comment:
+        'Some abrupt pace changes — work on smoother transitions',
+      chipClass: CHIP_CAUTION,
+    };
+  }
+  return {
+    headline,
+    label: 'Needs work',
+    comment: 'Delivery was choppy — focus on evening out your pace',
+    chipClass: CHIP_ATTENTION,
+  };
 }
 
 function activeSpeechDisplay(ratio: number): {
@@ -566,9 +616,9 @@ export function AnswerForm({
             const wpmHeadline = wpmFinite
               ? `${Math.round(analytics.speakingRateWpm)} WPM`
               : '—';
-            const trend = pacingShapeDisplay(
-              analytics.consistency?.pacingShape ?? null,
-            );
+            const pa = analytics.consistency.pacingAnalysis;
+            const trend = pacingAnalysisShapeDisplay(pa.shape);
+            const fluency = fluencyScoreDisplay(pa);
             const speech = activeSpeechDisplay(analytics.speechRatio);
             const paceOverTimeData =
               analytics.consistency.pacingWindows.map((p) => ({
@@ -600,28 +650,56 @@ export function AnswerForm({
                     ) : null}
                   </div>
 
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
-                      Pacing trend
-                    </p>
-                    {trend ? (
-                      <>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${trend.chipClass}`}
-                          >
-                            {trend.label}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
-                          {trend.helper}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        Not enough data to assess pacing trend.
+                  <div className="flex flex-col gap-6 sm:flex-row sm:gap-8">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                        Pacing pattern
                       </p>
-                    )}
+                      {trend ? (
+                        <>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${trend.chipClass}`}
+                            >
+                              {trend.label}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+                            {trend.helper}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                          Not enough data to assess pacing pattern.
+                        </p>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                        Delivery fluency
+                      </p>
+                      {fluency ? (
+                        <>
+                          <div className="mt-2 flex flex-wrap items-baseline gap-3">
+                            <span className="text-3xl font-bold tabular-nums text-gray-950 dark:text-white">
+                              {fluency.headline}
+                            </span>
+                            <span
+                              className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${fluency.chipClass}`}
+                            >
+                              {fluency.label}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+                            {fluency.comment}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                          Not enough data to score fluency.
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div>
