@@ -203,6 +203,29 @@ function avg(nums: number[]): number {
   return s / nums.length;
 }
 
+/** Bell-curve fluency score from raw LRV (local rate of variation). */
+function computeFluencyScore(lrv: number): number {
+  if (!Number.isFinite(lrv) || lrv < 0) {
+    return 0;
+  }
+  if (lrv >= 20 && lrv <= 30) {
+    return 100;
+  }
+  if (lrv >= 15 && lrv < 20) {
+    return Math.round(60 + ((lrv - 15) / 5) * 40);
+  }
+  if (lrv > 30 && lrv <= 35) {
+    return Math.round(100 - ((lrv - 30) / 5) * 40);
+  }
+  if (lrv >= 10 && lrv < 15) {
+    return Math.round(((lrv - 10) / 5) * 60);
+  }
+  if (lrv > 35 && lrv <= 45) {
+    return Math.round(60 - ((lrv - 35) / 10) * 60);
+  }
+  return 0;
+}
+
 function regressionSlopeWpmPerIndex(wpms: number[]): number {
   const n = wpms.length;
   if (n < 2) {
@@ -250,7 +273,7 @@ export function analyzePacingCurve(
   const lrvRaw = adjCount > 0 ? sumAdjDiff / adjCount : 0;
   const lrv = round2(lrvRaw);
 
-  const fluencyScore = Math.round(Math.max(0, (1 - lrvRaw / 40) * 100));
+  const fluencyScore = computeFluencyScore(lrvRaw);
 
   const peakLocations: number[] = [];
   const valleyLocations: number[] = [];
