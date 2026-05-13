@@ -10,6 +10,13 @@ import type { DeepgramAnalytics, PacingAnalysis } from '@/lib/deepgram-analytics
 import type { DeepgramCoachFeedback, DimensionScore } from '@/lib/deepgram-coach';
 import { SpeakingPaceOverTimeChart } from '@/components/interview/speaking-pace-over-time-chart';
 
+const cardShellClass =
+  'flex flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-600 dark:bg-gray-950/40';
+
+/** Coach feedback cards only: larger padding than scorecard; shell otherwise matches. */
+const coachCardShellClass =
+  'flex flex-col rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-600 dark:bg-gray-950/40';
+
 function DimensionScoreCard({
   title,
   dim,
@@ -20,7 +27,7 @@ function DimensionScoreCard({
   footer?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-600 dark:bg-gray-950/40">
+    <div className={cardShellClass}>
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
         {title}
       </p>
@@ -42,6 +49,37 @@ function DimensionScoreCard({
         </div>
       ) : null}
       {footer ? <div className="mt-3 border-t border-gray-100 pt-2 dark:border-gray-700">{footer}</div> : null}
+    </div>
+  );
+}
+
+type CoachFeedbackCardVariant = 'strength' | 'improvement' | 'suggestion';
+
+const coachFeedbackAccentClass: Record<CoachFeedbackCardVariant, string> = {
+  strength: 'border-t-2 border-emerald-500',
+  improvement: 'border-t-2 border-amber-500',
+  suggestion: 'border-t-2 border-blue-500',
+};
+
+function CoachFeedbackCard({
+  variant,
+  title,
+  body,
+}: {
+  variant: CoachFeedbackCardVariant;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div
+      className={`${coachCardShellClass} min-h-[160px] ${coachFeedbackAccentClass[variant]}`}
+    >
+      <p className="mb-2 text-lg font-semibold text-foreground">
+        {title}
+      </p>
+      <p className="text-base leading-relaxed text-foreground">
+        {body}
+      </p>
     </div>
   );
 }
@@ -566,23 +604,29 @@ export function AnswerForm({
       ) : null}
 
       {feedback ? (
-        <div
-          ref={feedbackRef}
-          className="space-y-3 rounded border border-green-200 bg-green-50/80 p-4 text-sm"
-          role="status"
-        >
-          <div>
-            <p className="font-semibold text-gray-900">Strength</p>
-            <p className="text-gray-800">{feedback.strength}</p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Improvement</p>
-            <p className="text-gray-800">{feedback.improvement}</p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Suggestion</p>
-            <p className="text-gray-800">{feedback.suggestion}</p>
-          </div>
+        <div ref={feedbackRef} role="status">
+          <section className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 shadow-sm dark:border-gray-600 dark:bg-gray-900/80">
+            <h3 className="text-base font-semibold tracking-tight text-gray-950 dark:text-white">
+              Coach Feedback
+            </h3>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <CoachFeedbackCard
+                variant="strength"
+                title="Strength"
+                body={feedback.strength}
+              />
+              <CoachFeedbackCard
+                variant="improvement"
+                title="Improvement"
+                body={feedback.improvement}
+              />
+              <CoachFeedbackCard
+                variant="suggestion"
+                title="Suggestion"
+                body={feedback.suggestion}
+              />
+            </div>
+          </section>
         </div>
       ) : null}
 
