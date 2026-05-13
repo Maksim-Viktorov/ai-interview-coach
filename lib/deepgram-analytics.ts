@@ -1,6 +1,36 @@
 const MIN_PAUSE_SECONDS = 0.8;
 const LONG_PAUSE_SECONDS = 1.5;
 
+/** Deepgram-style fillers; compare after `normalizeSpokenToken`. */
+const FILLER_WORDS_RAW = [
+  'uh',
+  'um',
+  'mhmm',
+  'mm-mm',
+  'uh-uh',
+  'uh-huh',
+  'nuh-uh',
+] as const;
+
+function normalizeSpokenToken(word: string): string {
+  return word.toLowerCase().replace(/[^\w-]/g, '').trim();
+}
+
+const FILLER_TOKENS_NORMALIZED = new Set(
+  FILLER_WORDS_RAW.map((w) => normalizeSpokenToken(w)),
+);
+
+function countFillerWords(words: DeepgramWord[]): number {
+  let n = 0;
+  for (const w of words) {
+    const t = normalizeSpokenToken(w.word);
+    if (t && FILLER_TOKENS_NORMALIZED.has(t)) {
+      n += 1;
+    }
+  }
+  return n;
+}
+
 export type DeepgramUtterance = {
   start: number;
   end: number;
@@ -65,6 +95,13 @@ export type DeepgramAnalytics = {
   totalSpeechSeconds: number;
   speechRatio: number;
   speakingRateWpm: number;
+  totalWords: number;
+  /** Average words between pauses: totalWords / (pauseCount + 1). */
+  meanRunLength: number;
+  fillerDensityPer100Words: number;
+  peaksPerMinute: number;
+  valleysPerMinute: number;
+  longPausesPerMinute: number;
   utterances: UtteranceAnalytics[];
   averageUtteranceWpm: number;
   /** @deprecated Legacy: population variance of per-utterance WPM — driven by segmentation, not rhythm. Prefer `consistency.pacingWindows`. */
@@ -131,6 +168,12 @@ function emptyAnalytics(): DeepgramAnalytics {
     totalSpeechSeconds: 0,
     speechRatio: 0,
     speakingRateWpm: 0,
+    totalWords: 0,
+    meanRunLength: 0,
+    fillerDensityPer100Words: 0,
+    peaksPerMinute: 0,
+    valleysPerMinute: 0,
+    longPausesPerMinute: 0,
     utterances: [],
     averageUtteranceWpm: 0,
     wpmVariance: 0,
@@ -428,7 +471,7 @@ export function analyzeDeepgramSpeech(options: {
   }
 
   let averageUtteranceWpm = 0;
-  /** Legacy utterance-WPM variance (coach still consumes until updated). */
+  /** Legacy utterance-WPM variance (segmentation-driven). */
   let wpmVariance = 0;
 
   const nUtterances = utteranceWpmValues.length;
@@ -450,6 +493,33 @@ export function analyzeDeepgramSpeech(options: {
   }
 
   const consistency = computePacingConsistency(validWords);
+  const pacingAnalysis = consistency.pacingAnalysis;
+
+  const durationForRates =
+    Number.isFinite(activeAnswerDurationSeconds) && activeAnswerDurationSeconds > 0
+      ? activeAnswerDurationSeconds
+      : 0;
+
+  const totalWords = wordCount;
+  const meanRunLength =
+    totalWords > 0 ? round2(totalWords / (pauseCount + 1)) : 0;
+
+  const fillerCount = countFillerWords(validWords);
+  const fillerDensityPer100Words =
+    totalWords > 0 ? round2((fillerCount / totalWords) * 100) : 0;
+
+  const peaksPerMinute =
+    durationForRates > 0
+      ? round2((pacingAnalysis.peakCount / durationForRates) * 60)
+      : 0;
+  const valleysPerMinute =
+    durationForRates > 0
+      ? round2((pacingAnalysis.valleyCount / durationForRates) * 60)
+      : 0;
+  const longPausesPerMinute =
+    durationForRates > 0
+      ? round2((longPauseCount / durationForRates) * 60)
+      : 0;
 
   return {
     pauseCount,
@@ -461,6 +531,12 @@ export function analyzeDeepgramSpeech(options: {
     totalSpeechSeconds: round2(totalSpeechSeconds),
     speechRatio,
     speakingRateWpm,
+    totalWords,
+    meanRunLength,
+    fillerDensityPer100Words,
+    peaksPerMinute,
+    valleysPerMinute,
+    longPausesPerMinute,
     utterances: utteranceAnalyticsList,
     averageUtteranceWpm,
     wpmVariance,
@@ -468,7 +544,7 @@ export function analyzeDeepgramSpeech(options: {
   };
 }
 
-/** Population CV of window WPMs — used by coach for variance scoring. */
+/** Population CV of window WPMs — optional diagnostics. */
 export function pacingWindowsCv(windows: PacingWindowPoint[]): number | null {
   const values = windows.map((w) => w.wpm);
   if (values.length < 3) {

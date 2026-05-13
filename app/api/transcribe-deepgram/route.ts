@@ -43,10 +43,10 @@ export async function POST(request: Request) {
     const coach = generateCoachFeedback(analytics);
 
     console.log('[deepgram] coach summary', {
-      overallScore: coach.overallScore,
-      pacing: coach.pacing.label,
-      pauses: coach.pauses.label,
-      consistency: coach.consistency.label,
+      pace: coach.pace.score,
+      fluency: coach.fluency.score,
+      cleanliness: coach.cleanliness.score,
+      dynamism: coach.dynamism.score,
     });
 
     return NextResponse.json({

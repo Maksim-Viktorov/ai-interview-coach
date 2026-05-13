@@ -1,67 +1,55 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { HighlightedTranscript } from '@/components/interview/highlighted-transcript';
 import {
   analyzePausesFromSamples,
   type PauseMetrics,
 } from '@/lib/pause-analysis';
 import type { DeepgramAnalytics, PacingAnalysis } from '@/lib/deepgram-analytics';
+import type { DeepgramCoachFeedback, DimensionScore } from '@/lib/deepgram-coach';
 import { SpeakingPaceOverTimeChart } from '@/components/interview/speaking-pace-over-time-chart';
 
-const CHIP_POSITIVE =
-  'border-emerald-500/55 bg-emerald-500/15 text-emerald-950 dark:border-emerald-400/45 dark:bg-emerald-500/20 dark:text-emerald-50';
-const CHIP_CAUTION =
-  'border-amber-500/55 bg-amber-500/15 text-amber-950 dark:border-amber-400/45 dark:bg-amber-500/18 dark:text-amber-50';
-const CHIP_ATTENTION =
-  'border-orange-500/55 bg-orange-500/15 text-orange-950 dark:border-orange-400/45 dark:bg-orange-500/18 dark:text-orange-50';
-
-function speakingPaceDisplay(wpm: number): {
-  label: string;
-  helper: string;
-  chipClass: string;
-} {
-  if (!Number.isFinite(wpm)) {
-    return {
-      label: '—',
-      helper: '',
-      chipClass: CHIP_CAUTION,
-    };
-  }
-  if (wpm < 150) {
-    return {
-      label: 'Too Slow',
-      helper:
-        'Too slow — you may sound uncertain or under-prepared',
-      chipClass: CHIP_CAUTION,
-    };
-  }
-  if (wpm < 180) {
-    return {
-      label: 'Slightly Slow',
-      helper:
-        'Slightly slow — clear delivery, but watch for dragging',
-      chipClass: CHIP_CAUTION,
-    };
-  }
-  if (wpm <= 230) {
-    return {
-      label: 'Ideal',
-      helper: 'Ideal — clear, confident, easy to follow',
-      chipClass: CHIP_POSITIVE,
-    };
-  }
-  return {
-    label: 'Too Fast',
-    helper: 'Too fast — you may be rushing or hard to follow',
-    chipClass: CHIP_ATTENTION,
-  };
+function DimensionScoreCard({
+  title,
+  dim,
+  footer,
+}: {
+  title: string;
+  dim: DimensionScore;
+  footer?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-600 dark:bg-gray-950/40">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+        {title}
+      </p>
+      <p className="mt-2 text-3xl font-bold tabular-nums text-gray-950 dark:text-white">
+        {dim.score === null ? '—' : dim.score}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+        {dim.label}
+      </p>
+      <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+        {dim.comment}
+      </p>
+      {dim.score !== null ? (
+        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+          <div
+            className="h-full rounded-full bg-emerald-600 dark:bg-emerald-500"
+            style={{ width: `${dim.score}%` }}
+          />
+        </div>
+      ) : null}
+      {footer ? <div className="mt-3 border-t border-gray-100 pt-2 dark:border-gray-700">{footer}</div> : null}
+    </div>
+  );
 }
 
-function pacingAnalysisShapeDisplay(shape: PacingAnalysis['shape']): {
+/** Phase 1 pacing curve copy — verbatim label + helper for UI descriptor. */
+function pacingCurveDescriptor(shape: PacingAnalysis['shape']): {
   label: string;
   helper: string;
-  chipClass: string;
 } | null {
   switch (shape) {
     case 'insufficient':
@@ -70,103 +58,43 @@ function pacingAnalysisShapeDisplay(shape: PacingAnalysis['shape']): {
       return {
         label: 'Steady',
         helper: 'Consistent pace throughout, easy to follow',
-        chipClass: CHIP_POSITIVE,
       };
     case 'accelerating':
       return {
         label: 'Accelerating',
         helper: 'You built momentum, good energy',
-        chipClass: CHIP_POSITIVE,
       };
     case 'decelerating':
       return {
         label: 'Decelerating',
         helper:
           'You slowed toward the end, make sure your conclusion lands',
-        chipClass: CHIP_CAUTION,
       };
     case 'strong-start':
       return {
         label: 'Front-loaded',
         helper:
           'You opened strongly then settled into a slower pace',
-        chipClass: CHIP_CAUTION,
       };
     case 'strong-finish':
       return {
         label: 'Back-loaded',
         helper: 'You warmed up as you went',
-        chipClass: CHIP_POSITIVE,
       };
     case 'wave':
       return {
         label: 'Variable',
         helper: 'Rhythmic pace variation, natural emphasis',
-        chipClass: CHIP_POSITIVE,
       };
     case 'erratic':
       return {
         label: 'Erratic',
         helper:
           'Your pace varied unpredictably, work on smoother transitions',
-        chipClass: CHIP_ATTENTION,
       };
     default:
       return null;
   }
-}
-
-function activeSpeechDisplay(ratio: number): {
-  pct: number;
-  label: string;
-  comment: string;
-  chipClass: string;
-} {
-  if (!Number.isFinite(ratio)) {
-    return {
-      pct: 0,
-      label: '—',
-      comment: '',
-      chipClass: CHIP_CAUTION,
-    };
-  }
-  const clamped = Math.min(1, Math.max(0, ratio));
-  const pct = Math.round(clamped * 100);
-  const r = clamped;
-  if (r > 0.85) {
-    return {
-      pct,
-      label: 'High energy delivery',
-      comment:
-        'You filled your answer well and kept strong verbal flow.',
-      chipClass: CHIP_POSITIVE,
-    };
-  }
-  if (r >= 0.7) {
-    return {
-      pct,
-      label: 'Solid delivery',
-      comment:
-        'Good use of your answer time with natural pacing and rhythm.',
-      chipClass: CHIP_POSITIVE,
-    };
-  }
-  if (r >= 0.55) {
-    return {
-      pct,
-      label: 'Moderate delivery',
-      comment:
-        'Room to develop your answer further — some gaps were present.',
-      chipClass: CHIP_CAUTION,
-    };
-  }
-  return {
-    pct,
-    label: 'Low fluency',
-    comment:
-      'Your answer had significant gaps — aim to expand and maintain flow.',
-    chipClass: CHIP_ATTENTION,
-  };
 }
 
 type AnswerFormProps = {
@@ -219,6 +147,8 @@ export function AnswerForm({
   >(null);
   const [transcriptEditing, setTranscriptEditing] = useState(false);
   const [analytics, setAnalytics] = useState<DeepgramAnalytics | null>(null);
+  const [coachScorecard, setCoachScorecard] =
+    useState<DeepgramCoachFeedback | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -307,7 +237,7 @@ export function AnswerForm({
       setMetrics(null);
       pauseMetricsRef.current = null;
       setAnalytics(null);
-      setAudioDurationSeconds(null);
+      setCoachScorecard(null);
       setTranscriptionError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
@@ -368,6 +298,7 @@ export function AnswerForm({
     setTranscriptionError(null);
     setMetrics(null);
     setAnalytics(null);
+    setCoachScorecard(null);
 
     try {
       const formData = new FormData();
@@ -387,6 +318,7 @@ export function AnswerForm({
         error?: string;
         metrics?: TranscribeMetrics;
         analytics?: DeepgramAnalytics;
+        coach?: DeepgramCoachFeedback;
         words?: unknown;
       };
 
@@ -394,6 +326,7 @@ export function AnswerForm({
         setTranscriptionError(data.error ?? 'Transcription failed');
         setMetrics(mergePauseIntoMetrics(null));
         setAnalytics(null);
+        setCoachScorecard(null);
         return;
       }
 
@@ -402,12 +335,14 @@ export function AnswerForm({
       }
       setMetrics(mergePauseIntoMetrics(data.metrics ?? null));
       setAnalytics(data.analytics ?? null);
+      setCoachScorecard(data.coach ?? null);
       setTranscriptEditing(false);
       setTranscriptionError(null);
     } catch {
       setTranscriptionError('Transcription failed');
       setMetrics(mergePauseIntoMetrics(null));
       setAnalytics(null);
+      setCoachScorecard(null);
     } finally {
       setTranscribing(false);
     }
@@ -559,90 +494,65 @@ export function AnswerForm({
           </h3>
 
           {(() => {
-            const pace = speakingPaceDisplay(analytics.speakingRateWpm);
             const wpmFinite = Number.isFinite(analytics.speakingRateWpm);
             const wpmHeadline = wpmFinite
               ? `${Math.round(analytics.speakingRateWpm)} WPM`
               : '—';
             const pa = analytics.consistency.pacingAnalysis;
-            const trend = pacingAnalysisShapeDisplay(pa.shape);
-            const speech = activeSpeechDisplay(analytics.speechRatio);
+            const curve = pacingCurveDescriptor(pa.shape);
             const paceOverTimeData =
               analytics.consistency.pacingWindows.map((p) => ({
                 time: p.midTime,
                 wpm: p.wpm,
               }));
 
+            const dynamismFooter =
+              curve == null ? null : (
+                <div className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+                  <p className="font-medium text-gray-800 dark:text-gray-200">
+                    Curve shape: {curve.label}
+                  </p>
+                  <p className="mt-0.5">{curve.helper}</p>
+                </div>
+              );
+
             return (
               <>
-                <div className="mt-4 space-y-6">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
-                      Speaking pace
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-baseline gap-3">
-                      <span className="text-3xl font-bold tabular-nums text-gray-950 dark:text-white">
-                        {wpmHeadline}
-                      </span>
-                      <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${pace.chipClass}`}
-                      >
-                        {pace.label}
-                      </span>
-                    </div>
-                    {pace.helper ? (
-                      <p className="mt-2 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
-                        {pace.helper}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
-                      Pacing pattern
-                    </p>
-                    {trend ? (
-                      <>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${trend.chipClass}`}
-                          >
-                            {trend.label}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
-                          {trend.helper}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        Not enough data to assess pacing pattern.
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
-                      Active speech
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-baseline gap-3">
-                      <span className="text-2xl font-bold tabular-nums text-gray-950 dark:text-white">
-                        {speech.pct}%
-                      </span>
-                      <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${speech.chipClass}`}
-                      >
-                        {speech.label}
-                      </span>
-                    </div>
-                    {speech.comment ? (
-                      <p className="mt-2 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
-                        {speech.comment}
-                      </p>
-                    ) : null}
-                  </div>
+                <div className="mt-4 flex flex-wrap items-baseline gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                    Speaking rate
+                  </span>
+                  <span className="text-lg font-bold tabular-nums text-gray-950 dark:text-white">
+                    {wpmHeadline}
+                  </span>
                 </div>
-                <SpeakingPaceOverTimeChart data={paceOverTimeData} />
+
+                {coachScorecard ? (
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <DimensionScoreCard title="Pace" dim={coachScorecard.pace} />
+                    <DimensionScoreCard
+                      title="Fluency"
+                      dim={coachScorecard.fluency}
+                    />
+                    <DimensionScoreCard
+                      title="Cleanliness"
+                      dim={coachScorecard.cleanliness}
+                    />
+                    <DimensionScoreCard
+                      title="Dynamism"
+                      dim={coachScorecard.dynamism}
+                      footer={dynamismFooter}
+                    />
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                    Delivery scorecard was not returned for this transcription.
+                  </p>
+                )}
+
+                <div className="mt-6">
+                  <SpeakingPaceOverTimeChart data={paceOverTimeData} />
+                </div>
               </>
             );
           })()}
