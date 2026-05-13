@@ -244,7 +244,7 @@ export function analyzePacingCurve(
   let shape: PacingAnalysis['shape'];
   if (peakCount >= 2 && valleyCount >= 2) {
     shape = 'wave';
-  } else if (lrv > 25) {
+  } else if (lrv > 40) {
     shape = 'erratic';
   } else if (
     Math.abs(openingToClosingDrift) < 10 &&

@@ -203,15 +203,15 @@ export function generateCoachFeedback(
   let pacingLabel: DeepgramCoachFeedback['pacing']['label'];
   let pacingExplanation: string;
 
-  if (speakingRateWpm < 100) {
+  if (speakingRateWpm < 150) {
     pacingLabel = 'too_slow';
-    pacingExplanation = `Overall speaking rate is low (${speakingRateWpm.toFixed(0)} WPM), which may sound sluggish in an interview setting.`;
-  } else if (speakingRateWpm > 160) {
+    pacingExplanation = `Speaking rate is below 150 WPM (${speakingRateWpm.toFixed(0)} WPM) — you may sound uncertain or under-prepared.`;
+  } else if (speakingRateWpm > 230) {
     pacingLabel = 'too_fast';
-    pacingExplanation = `Overall speaking rate is high (${speakingRateWpm.toFixed(0)} WPM), which can make answers harder to follow.`;
+    pacingExplanation = `Speaking rate is above 230 WPM (${speakingRateWpm.toFixed(0)} WPM) — you may be rushing or hard to follow.`;
   } else {
     pacingLabel = 'good';
-    pacingExplanation = `Overall pacing is in a comfortable range (${speakingRateWpm.toFixed(0)} WPM).`;
+    pacingExplanation = `Overall pacing is in a comfortable range (${speakingRateWpm.toFixed(0)} WPM): clear, confident, and easy to follow.`;
   }
 
   const pacingDeviationWeight = pacingLabel === 'good' ? 0 : 15;
@@ -286,13 +286,13 @@ export function generateCoachFeedback(
   let pacingSentence: string;
   if (pacingLabel === 'too_slow') {
     pacingSentence =
-      'Your overall speaking pace runs slower than typical interview answers.';
+      'Your overall speaking pace is below the comfortable interview band (under 150 WPM).';
   } else if (pacingLabel === 'too_fast') {
     pacingSentence =
-      'Your overall speaking pace runs faster than ideal for clear interview answers.';
+      'Your overall speaking pace is above the comfortable band (over 230 WPM), which can sound rushed.';
   } else {
     pacingSentence =
-      'Your overall speaking pace sits in a comfortable range for most listeners.';
+      'Your overall speaking pace sits in the comfortable 150–230 WPM range for most listeners.';
   }
 
   let pauseSentence: string;

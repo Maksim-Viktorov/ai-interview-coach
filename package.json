@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "calibrate": "tsx scripts/calibration/run-calibration.ts",
+    "calibrate:analyse": "tsx scripts/calibration/analyse-results.ts"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.1.0",
@@ -22,9 +24,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^16.6.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
