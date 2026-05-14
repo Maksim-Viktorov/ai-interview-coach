@@ -32,6 +32,18 @@ export function SpeakingPaceOverTimeChart({
   const yMin = Math.max(0, Math.floor(minWpm - pad));
   const yMax = Math.ceil(maxWpm + pad);
 
+  const minTime = sorted[0]!.time;
+  const maxTime = sorted[sorted.length - 1]!.time;
+  const tickStart = Math.ceil(minTime / 2) * 2;
+  const tickEnd = Math.floor(maxTime / 2) * 2;
+  const xAxisTicks: number[] = [];
+  for (let t = tickStart; t <= tickEnd; t += 2) {
+    xAxisTicks.push(t);
+  }
+  if (xAxisTicks.length === 0) {
+    xAxisTicks.push(Math.round(((minTime + maxTime) / 2) / 2) * 2);
+  }
+
   const xDomain: [number, number] | ['dataMin', 'dataMax'] =
     sorted.length === 1
       ? [
@@ -68,7 +80,8 @@ export function SpeakingPaceOverTimeChart({
               dataKey="time"
               type="number"
               domain={xDomain}
-              tickFormatter={(v) => `${v}s`}
+              ticks={xAxisTicks}
+              tickFormatter={(v) => `${Math.round(Number(v))}s`}
               tick={{ fontSize: 11 }}
               stroke="currentColor"
               className="text-gray-500 dark:text-gray-400"

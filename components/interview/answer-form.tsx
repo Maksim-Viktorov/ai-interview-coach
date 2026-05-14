@@ -17,6 +17,14 @@ const cardShellClass =
 const coachCardShellClass =
   'flex flex-col rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-600 dark:bg-gray-950/40';
 
+function scoreColorClass(score: number): string {
+  if (score >= 85) return 'bg-emerald-500';
+  if (score >= 70) return 'bg-lime-500';
+  if (score >= 55) return 'bg-yellow-500';
+  if (score >= 40) return 'bg-orange-500';
+  return 'bg-red-500';
+}
+
 function DimensionScoreCard({
   title,
   dim,
@@ -43,7 +51,7 @@ function DimensionScoreCard({
       {dim.score !== null ? (
         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
           <div
-            className="h-full rounded-full bg-emerald-600 dark:bg-emerald-500"
+            className={`h-full rounded-full ${scoreColorClass(dim.score)}`}
             style={{ width: `${dim.score}%` }}
           />
         </div>
