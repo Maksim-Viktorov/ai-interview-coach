@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { HighlightedTranscript } from '@/components/interview/highlighted-transcript';
+import { CameraPreview } from '@/components/interview/camera-preview';
+import { EngagementSection } from '@/components/interview/engagement-section';
 import {
   analyzePausesFromSamples,
   type PauseMetrics,
@@ -9,6 +11,10 @@ import {
 import type { DeepgramAnalytics, PacingAnalysis } from '@/lib/deepgram-analytics';
 import type { DeepgramCoachFeedback, DimensionScore } from '@/lib/deepgram-coach';
 import { SpeakingPaceOverTimeChart } from '@/components/interview/speaking-pace-over-time-chart';
+import {
+  useGazeTracking,
+  type GazeMetricsSnapshot,
+} from '@/hooks/useGazeTracking';
 
 const cardShellClass =
   'flex flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-600 dark:bg-gray-950/40';
@@ -195,14 +201,44 @@ export function AnswerForm({
   const [analytics, setAnalytics] = useState<DeepgramAnalytics | null>(null);
   const [coachScorecard, setCoachScorecard] =
     useState<DeepgramCoachFeedback | null>(null);
+  const [cameraPermission, setCameraPermission] = useState<
+    'unrequested' | 'granted' | 'denied'
+  >('unrequested');
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [capturedEngagement, setCapturedEngagement] =
+    useState<GazeMetricsSnapshot | null>(null);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const { state: gazeState, controls: gazeControls } = useGazeTracking();
+  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const usedCameraThisRecordingRef = useRef(false);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioUrlRef = useRef<string | null>(null);
   const feedbackRef = useRef<HTMLDivElement | null>(null);
   const hadFeedbackRef = useRef(false);
   /** Latest pause analysis; merged into `metrics` after transcription completes. */
   const pauseMetricsRef = useRef<PauseMetrics | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
+  /** Keeps latest camera stream reference for recorder.onstop (stops tracks). */
+  useEffect(() => {
+    cameraStreamRef.current = cameraStream;
+  }, [cameraStream]);
+
+  /** Start / stop gaze rAF tied to recording + preview stream. */
+  useEffect(() => {
+    if (!isRecording || !cameraStream) {
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      const el = cameraVideoRef.current;
+      if (el) void gazeControls.startTracking(el);
+    });
+    return () => {
+      cancelAnimationFrame(id);
+      gazeControls.stopTracking();
+    };
+  }, [isRecording, cameraStream, gazeControls]);
 
   const mergePauseIntoMetrics = (
     base: TranscribeMetrics | null,
@@ -264,6 +300,8 @@ export function AnswerForm({
         rec.stream?.getTracks().forEach((t) => t.stop());
       }
       revokeAudioObjectUrl();
+      cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
+      cameraStreamRef.current = null;
     };
   }, []);
 
@@ -285,10 +323,34 @@ export function AnswerForm({
       setAnalytics(null);
       setCoachScorecard(null);
       setTranscriptionError(null);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      gazeControls.resetForNewRecording();
+      setCapturedEngagement(null);
+      usedCameraThisRecordingRef.current = false;
+
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+
+      const videoStream = await navigator.mediaDevices
+        .getUserMedia({
+          video: { width: 640, height: 480 },
+          audio: false,
+        })
+        .catch(() => null);
+
+      if (videoStream) {
+        usedCameraThisRecordingRef.current = true;
+        setCameraPermission('granted');
+        setCameraStream(videoStream);
+      } else {
+        usedCameraThisRecordingRef.current = false;
+        setCameraPermission('denied');
+        setCameraStream(null);
+      }
+
       chunksRef.current = [];
 
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(audioStream);
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
@@ -301,19 +363,34 @@ export function AnswerForm({
         const blob = new Blob(chunksRef.current, {
           type: recorder.mimeType || 'audio/webm',
         });
+
+        const hadCamera = usedCameraThisRecordingRef.current;
+        const gazeSnap = hadCamera ? gazeControls.getSnapshot() : null;
+        gazeControls.stopTracking();
+
+        const camStream = cameraStreamRef.current;
+        if (camStream) {
+          camStream.getTracks().forEach((t) => t.stop());
+        }
+        cameraStreamRef.current = null;
+        setCameraStream(null);
+
+        setCapturedEngagement(gazeSnap);
+        setIsRecording(false);
+
         revokeAudioObjectUrl();
         const url = URL.createObjectURL(blob);
         audioUrlRef.current = url;
         setAudioUrl(url);
         setAudioBlob(blob);
         setAudioDurationSeconds(null);
-        const audio = new Audio(url);
-        audio.addEventListener('loadedmetadata', () => {
-          if (Number.isFinite(audio.duration)) {
-            setAudioDurationSeconds(audio.duration);
+        const audioLoad = new Audio(url);
+        audioLoad.addEventListener('loadedmetadata', () => {
+          if (Number.isFinite(audioLoad.duration)) {
+            setAudioDurationSeconds(audioLoad.duration);
           }
         });
-        stream.getTracks().forEach((t) => t.stop());
+        audioStream.getTracks().forEach((t) => t.stop());
         mediaRecorderRef.current = null;
         void analyzePauseMetrics(blob);
         setTimeout(() => {
@@ -325,6 +402,7 @@ export function AnswerForm({
       setIsRecording(true);
     } catch (err) {
       console.error(err);
+      setCameraStream(null);
     }
   };
 
@@ -333,7 +411,6 @@ export function AnswerForm({
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
     }
-    setIsRecording(false);
   };
 
   const transcribeBlob = async (
@@ -425,6 +502,7 @@ export function AnswerForm({
           speechMetrics: metrics,
           scorecard: coachScorecard ?? undefined,
           analytics: analytics ?? undefined,
+          gazeMetrics: capturedEngagement ?? undefined,
         }),
       });
 
@@ -458,36 +536,54 @@ export function AnswerForm({
 
       <p>{question}</p>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {!isRecording ? (
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {!isRecording ? (
+            <button
+              type="button"
+              className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => void startRecording()}
+            >
+              Start Recording
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={stopRecording}
+            >
+              Stop Recording
+            </button>
+          )}
+          {audioBlob ? (
+            <span className="text-sm text-green-700">Audio recorded</span>
+          ) : null}
           <button
             type="button"
             className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={() => void startRecording()}
+            disabled={!audioBlob || transcribing}
+            onClick={() => void handleTranscribe()}
           >
-            Start Recording
+            {transcribing ? 'Transcribing...' : 'Transcribe Recording'}
           </button>
-        ) : (
-          <button
-            type="button"
-            className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={stopRecording}
-          >
-            Stop Recording
-          </button>
-        )}
-        {audioBlob ? (
-          <span className="text-sm text-green-700">Audio recorded</span>
+        </div>
+        {isRecording && cameraStream ? (
+          <CameraPreview
+            ref={cameraVideoRef}
+            stream={cameraStream}
+            isLookingAtCamera={gazeState.isLookingAtCamera}
+            isCalibrating={gazeState.isCalibrating}
+            isFaceDetected={gazeState.isFaceDetected}
+          />
         ) : null}
-        <button
-          type="button"
-          className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!audioBlob || transcribing}
-          onClick={() => void handleTranscribe()}
-        >
-          {transcribing ? 'Transcribing...' : 'Transcribe Recording'}
-        </button>
       </div>
+
+      {cameraPermission === 'denied' ? (
+        <p className="text-xs text-gray-600 dark:text-gray-400">
+          Camera unavailable — engagement is skipped. You can still record
+          audio.
+        </p>
+      ) : null}
 
       {transcriptionError ? (
         <p className="text-sm text-red-600" role="alert">
@@ -614,7 +710,9 @@ export function AnswerForm({
       ) : null}
 
       {feedback ? (
-        <div ref={feedbackRef} role="status">
+        <div ref={feedbackRef} className="space-y-6" role="status">
+          <EngagementSection metrics={capturedEngagement} />
+
           <section className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 shadow-sm dark:border-gray-600 dark:bg-gray-900/80">
             <h3 className="text-base font-semibold tracking-tight text-gray-950 dark:text-white">
               Coach Feedback
