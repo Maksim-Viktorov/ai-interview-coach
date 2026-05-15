@@ -13,6 +13,14 @@ type SpeechMetricsPayload = {
   fillerFeedback: string;
 };
 
+type GazeMetricsPayload = {
+  eyeContactRatio: number | null;
+  lookAwayEvents: number;
+  longestLookAwayMs: number;
+  totalFaceDetectedMs: number;
+  hasSufficientData: boolean;
+};
+
 type AnswersRequestBody = {
   sessionId?: string;
   question?: string;
@@ -20,6 +28,7 @@ type AnswersRequestBody = {
   speechMetrics?: SpeechMetricsPayload | null;
   scorecard?: unknown;
   analytics?: DeepgramAnalytics | null;
+  gazeMetrics?: unknown;
 };
 
 const FEEDBACK_PARSE_FALLBACK = {
@@ -40,6 +49,21 @@ type ParsedFeedback = {
   improvement: string;
   suggestion: string;
 };
+
+function isValidGazeMetrics(v: unknown): v is GazeMetricsPayload {
+  if (v == null || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return (
+    (o.eyeContactRatio === null || typeof o.eyeContactRatio === 'number') &&
+    typeof o.lookAwayEvents === 'number' &&
+    Number.isFinite(o.lookAwayEvents) &&
+    typeof o.longestLookAwayMs === 'number' &&
+    Number.isFinite(o.longestLookAwayMs) &&
+    typeof o.totalFaceDetectedMs === 'number' &&
+    Number.isFinite(o.totalFaceDetectedMs) &&
+    typeof o.hasSufficientData === 'boolean'
+  );
+}
 
 function isValidScorecard(s: unknown): s is DimensionScorecard {
   if (!s || typeof s !== 'object') return false;
@@ -141,14 +165,32 @@ Each field: 30 to 60 words. Be specific and reference the actual content. Do not
 export async function POST(request: Request) {
   const body = (await request.json()) as AnswersRequestBody;
 
-  const { sessionId, question, answer, speechMetrics, scorecard, analytics } =
-    body;
+  const {
+    sessionId,
+    question,
+    answer,
+    speechMetrics,
+    scorecard,
+    analytics,
+    gazeMetrics,
+  } = body;
 
   if (!sessionId || !question || !answer) {
     return NextResponse.json(
       { error: 'sessionId, question, and answer are required' },
       { status: 400 },
     );
+  }
+
+  let resolvedGaze: GazeMetricsPayload | null = null;
+  if (gazeMetrics !== undefined && gazeMetrics !== null) {
+    if (isValidGazeMetrics(gazeMetrics)) {
+      resolvedGaze = gazeMetrics;
+    } else {
+      console.warn(
+        '[answers] malformed gazeMetrics in request body — storing null',
+      );
+    }
   }
 
   let resolvedScorecard: DimensionScorecard | null = null;
@@ -195,6 +237,7 @@ export async function POST(request: Request) {
         feedback,
         speech_metrics: speechMetrics ?? null,
         delivery_scorecard: resolvedScorecard,
+        gaze_metrics: resolvedGaze,
       },
     ])
     .select()
