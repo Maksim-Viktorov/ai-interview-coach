@@ -1,228 +1,22 @@
 'use client';
 
-import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { useEffect, useRef, useState } from 'react';
-
-const DEFAULT_YAW_THRESHOLD = 15;
-const DEFAULT_PITCH_THRESHOLD = 12;
-const DEFAULT_IRIS_H_TOLERANCE = 0.12;
-const DEFAULT_IRIS_DOWN_TOLERANCE = 0.1;
-const DEFAULT_IRIS_UP_TOLERANCE = 0.18;
-
-const ROLLING_N = 30;
-const MIN_FRAMES_FOR_EYE_CONTACT_RATIO = 30;
-const BASELINE_SAMPLE_COUNT = 30;
-const BLINK_EAR_THRESHOLD = 0.18;
-const UI_FLUSH_MS = 100;
-const DEBOUNCE_MS = 150;
-
-const IRIS_IDX = {
-  rightIris: 468,
-  leftIris: 473,
-  rightInner: 133,
-  rightOuter: 33,
-  leftInner: 362,
-  leftOuter: 263,
-  rightTopLid: 159,
-  rightBottomLid: 145,
-  leftTopLid: 386,
-  leftBottomLid: 374,
-} as const;
-
-/**
- * Yaw/pitch signs follow MediaPipe's convention and may feel inverted vs intuition;
- * thresholds use Math.abs so behavior does not depend on sign.
- */
-function extractHeadPose(matrix: Float32Array | number[]): {
-  yaw: number;
-  pitch: number;
-  roll: number;
-} {
-  const m13 = matrix[2]!;
-  const m21 = matrix[4]!;
-  const m22 = matrix[5]!;
-  const m23 = matrix[6]!;
-  const m33 = matrix[10]!;
-
-  const pitch = Math.asin(-m23) * (180 / Math.PI);
-  const yaw = Math.atan2(m13, m33) * (180 / Math.PI);
-  const roll = Math.atan2(m21, m22) * (180 / Math.PI);
-  return { yaw, pitch, roll };
-}
-
-function irisHorizontalRatio(
-  iris: { x: number },
-  innerCorner: { x: number },
-  outerCorner: { x: number },
-): number {
-  const eyeWidth = outerCorner.x - innerCorner.x;
-  if (Math.abs(eyeWidth) < 1e-6) return 0.5;
-  return (iris.x - innerCorner.x) / eyeWidth;
-}
-
-function irisVerticalRatio(
-  iris: { y: number },
-  topLid: { y: number },
-  bottomLid: { y: number },
-): number {
-  const eyeHeight = bottomLid.y - topLid.y;
-  if (Math.abs(eyeHeight) < 1e-6) return 0.5;
-  return (iris.y - topLid.y) / eyeHeight;
-}
-
-function eyeAspectRatio(
-  top: { y: number },
-  bottom: { y: number },
-  inner: { x: number },
-  outer: { x: number },
-): number {
-  const height = Math.abs(bottom.y - top.y);
-  const width = Math.abs(outer.x - inner.x);
-  if (width < 1e-6) return 0;
-  return height / width;
-}
-
-function isFullyValidDetection(result: {
-  faceLandmarks?: { x: number; y: number; z?: number }[][];
-  facialTransformationMatrixes?: { data: Float32Array | number[] }[];
-}): boolean {
-  if (!result.faceLandmarks?.length) return false;
-  const lm = result.faceLandmarks[0];
-  if (!lm) return false;
-  const matrix = result.facialTransformationMatrixes?.[0]?.data;
-  if (!matrix || matrix.length < 16) return false;
-  const idx = Object.values(IRIS_IDX);
-  for (const i of idx) {
-    const p = lm[i];
-    if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return false;
-  }
-  return true;
-}
-
-type ThrottledUi = {
-  fps: string;
-  detection: string;
-  yaw: string;
-  pitch: string;
-  roll: string;
-  irisHRight: string;
-  irisHLeft: string;
-  irisHAvg: string;
-  irisVRight: string;
-  irisVLeft: string;
-  irisVAvg: string;
-  baselineH: string;
-  baselineV: string;
-  ear: string;
-  blink: string;
-  verticalDeviation: string;
-  indicator: 'gray' | 'green' | 'red' | 'blue';
-  indicatorLabel: string;
-  eyeContact: string;
-  lookAwayEvents: number;
-  lookAwayMs: number;
-  totalFaceSec: string;
-};
+import { useGazeTracking } from '@/hooks/useGazeTracking';
 
 export default function GazePrototypePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const initInProgressRef = useRef(false);
-  const hasLoggedRef = useRef(false);
-  const totalFramesRef = useRef(0);
-  const frameTimestampsRef = useRef<number[]>([]);
-
-  const yawThresholdRef = useRef(DEFAULT_YAW_THRESHOLD);
-  const pitchThresholdRef = useRef(DEFAULT_PITCH_THRESHOLD);
-  const irisHToleranceRef = useRef(DEFAULT_IRIS_H_TOLERANCE);
-  const irisDownToleranceRef = useRef(DEFAULT_IRIS_DOWN_TOLERANCE);
-  const irisUpToleranceRef = useRef(DEFAULT_IRIS_UP_TOLERANCE);
-
-  const baselineHRef = useRef<number | null>(null);
-  const baselineVRef = useRef<number | null>(null);
-  const baselineSamplesRef = useRef<{ h: number[]; v: number[] }>({
-    h: [],
-    v: [],
-  });
-
-  const debouncedLookingRef = useRef(false);
-  const pendingSinceRef = useRef<number | null>(null);
-  const pendingRawRef = useRef<boolean | null>(null);
-  const prevDebouncedLookingRef = useRef(false);
-
-  const framesFaceDetectedRef = useRef(0);
-  const framesLookingWhileFaceRef = useRef(0);
-  const lookAwayEventsRef = useRef(0);
-  const lookAwayMsRef = useRef(0);
-  const totalFaceMsRef = useRef(0);
-
-  const lastTickTimeRef = useRef<number | null>(null);
-  const lastUiFlushRef = useRef(0);
-  const pendingUiRef = useRef<ThrottledUi | null>(null);
 
   const [cameraStatus, setCameraStatus] = useState('Requesting permission...');
-  const [mediaPipeStatus, setMediaPipeStatus] = useState('Waiting...');
-
   const [cameraReady, setCameraReady] = useState(false);
-  const [landmarkerReady, setLandmarkerReady] = useState(false);
   const [videoHasFrameData, setVideoHasFrameData] = useState(false);
 
-  const [yawThreshold, setYawThreshold] = useState(DEFAULT_YAW_THRESHOLD);
-  const [pitchThreshold, setPitchThreshold] = useState(DEFAULT_PITCH_THRESHOLD);
-  const [irisHTolerance, setIrisHTolerance] = useState(DEFAULT_IRIS_H_TOLERANCE);
-  const [irisDownTolerance, setIrisDownTolerance] = useState(
-    DEFAULT_IRIS_DOWN_TOLERANCE,
-  );
-  const [irisUpTolerance, setIrisUpTolerance] = useState(
-    DEFAULT_IRIS_UP_TOLERANCE,
-  );
+  const { state, controls } = useGazeTracking({ enableDebugExtras: true });
+  const controlsRef = useRef(controls);
 
-  const [throttledUi, setThrottledUi] = useState<ThrottledUi>({
-    fps: 'Measuring...',
-    detection: 'Waiting...',
-    yaw: '—',
-    pitch: '—',
-    roll: '—',
-    irisHRight: '—',
-    irisHLeft: '—',
-    irisHAvg: '—',
-    irisVRight: '—',
-    irisVLeft: '—',
-    irisVAvg: '—',
-    baselineH: '—',
-    baselineV: '—',
-    ear: '—',
-    blink: 'no',
-    verticalDeviation: '—',
-    indicator: 'gray',
-    indicatorLabel: 'No face detected',
-    eyeContact: '—',
-    lookAwayEvents: 0,
-    lookAwayMs: 0,
-    totalFaceSec: '0.0',
+  useEffect(() => {
+    controlsRef.current = controls;
   });
-
-  useEffect(() => {
-    yawThresholdRef.current = yawThreshold;
-  }, [yawThreshold]);
-
-  useEffect(() => {
-    pitchThresholdRef.current = pitchThreshold;
-  }, [pitchThreshold]);
-
-  useEffect(() => {
-    irisHToleranceRef.current = irisHTolerance;
-  }, [irisHTolerance]);
-
-  useEffect(() => {
-    irisDownToleranceRef.current = irisDownTolerance;
-  }, [irisDownTolerance]);
-
-  useEffect(() => {
-    irisUpToleranceRef.current = irisUpTolerance;
-  }, [irisUpTolerance]);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -253,6 +47,7 @@ export default function GazePrototypePage() {
     })();
 
     return () => {
+      controlsRef.current.stopTracking();
       stream?.getTracks().forEach((t) => t.stop());
       mediaStreamRef.current = null;
       if (video) {
@@ -264,440 +59,36 @@ export default function GazePrototypePage() {
   }, []);
 
   useEffect(() => {
-    if (!cameraReady) {
+    if (!cameraReady || !videoHasFrameData) {
       return;
     }
-
-    let cancelled = false;
-    initInProgressRef.current = true;
-
-    void queueMicrotask(() => {
-      setMediaPipeStatus('Loading...');
-      setLandmarkerReady(false);
-    });
-
-    void (async () => {
-      try {
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm',
-        );
-        if (cancelled) {
-          return;
-        }
-
-        const faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-            delegate: 'GPU',
-          },
-          outputFaceBlendshapes: false,
-          outputFacialTransformationMatrixes: true,
-          runningMode: 'VIDEO',
-          numFaces: 1,
-        });
-
-        if (cancelled) {
-          faceLandmarker.close();
-          return;
-        }
-
-        faceLandmarkerRef.current = faceLandmarker;
-        setLandmarkerReady(true);
-        setMediaPipeStatus('Ready');
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!cancelled) {
-          setMediaPipeStatus(`Error: ${msg}`);
-          setLandmarkerReady(false);
-        }
-      } finally {
-        initInProgressRef.current = false;
-      }
-    })();
-
+    const v = videoRef.current;
+    if (!v) {
+      return;
+    }
+    void controlsRef.current.startTracking(v);
     return () => {
-      cancelled = true;
-      initInProgressRef.current = false;
-      const lm = faceLandmarkerRef.current;
-      if (lm) {
-        lm.close();
-        faceLandmarkerRef.current = null;
-      }
-      setLandmarkerReady(false);
-      setMediaPipeStatus('Waiting...');
+      controlsRef.current.stopTracking();
     };
-  }, [cameraReady]);
+  }, [cameraReady, videoHasFrameData]);
 
-  useEffect(() => {
-    if (!cameraReady || !landmarkerReady || !videoHasFrameData) {
-      return;
-    }
-
-    const video = videoRef.current;
-    const landmarker = faceLandmarkerRef.current;
-    if (!video || !landmarker) {
-      return;
-    }
-
-    totalFramesRef.current = 0;
-    frameTimestampsRef.current = [];
-    lastTickTimeRef.current = null;
-    lastUiFlushRef.current = performance.now();
-
-    void queueMicrotask(() => {
-      setThrottledUi((u) => ({ ...u, fps: 'Measuring...', detection: 'Waiting...' }));
-    });
-
-    let cancelled = false;
-
-    const tick = () => {
-      if (cancelled) {
-        return;
-      }
-
-      if (video.readyState < 2) {
-        requestAnimationFrame(tick);
-        return;
-      }
-
-      try {
-        const result = landmarker.detectForVideo(video, performance.now());
-        totalFramesRef.current += 1;
-
-        const now = performance.now();
-
-        const stamps = frameTimestampsRef.current;
-        stamps.push(now);
-        if (stamps.length > ROLLING_N) {
-          stamps.splice(0, stamps.length - ROLLING_N);
-        }
-
-        let fpsStr = 'Measuring...';
-        if (stamps.length >= ROLLING_N) {
-          const oldest = stamps[0]!;
-          const latest = stamps[ROLLING_N - 1]!;
-          const dtMs = latest - oldest;
-          if (dtMs > 0) {
-            const fps = (ROLLING_N / dtMs) * 1000;
-            fpsStr = `${fps.toFixed(1)} fps`;
-          }
-        }
-
-        const hasFaceLandmarks = (result.faceLandmarks?.length ?? 0) > 0;
-        const detectionLine = hasFaceLandmarks
-          ? 'Face detected'
-          : 'No face detected';
-
-        if (
-          !hasLoggedRef.current &&
-          result.faceLandmarks &&
-          result.faceLandmarks.length > 0
-        ) {
-          hasLoggedRef.current = true;
-          console.log('First detection result:', result);
-        }
-
-        const fullyValid = isFullyValidDetection(result);
-
-        let yaw = 0;
-        let pitch = 0;
-        let roll = 0;
-        let rightIrisHRatio = 0.5;
-        let leftIrisHRatio = 0.5;
-        let irisHCenterRatio = 0.5;
-        let rightIrisVRatio = 0.5;
-        let leftIrisVRatio = 0.5;
-        let irisVCenterRatio = 0.5;
-        let rawLooking = false;
-        let avgEAR = 0;
-        let isBlink = false;
-        let verticalDeviationNum: number | null = null;
-
-        if (fullyValid) {
-          const matrix = result.facialTransformationMatrixes![0]!.data;
-          ({ yaw, pitch, roll } = extractHeadPose(matrix));
-          const lm = result.faceLandmarks![0]!;
-          rightIrisHRatio = irisHorizontalRatio(
-            lm[IRIS_IDX.rightIris]!,
-            lm[IRIS_IDX.rightInner]!,
-            lm[IRIS_IDX.rightOuter]!,
-          );
-          leftIrisHRatio = irisHorizontalRatio(
-            lm[IRIS_IDX.leftIris]!,
-            lm[IRIS_IDX.leftInner]!,
-            lm[IRIS_IDX.leftOuter]!,
-          );
-          irisHCenterRatio = (rightIrisHRatio + leftIrisHRatio) / 2;
-
-          rightIrisVRatio = irisVerticalRatio(
-            lm[IRIS_IDX.rightIris]!,
-            lm[IRIS_IDX.rightTopLid]!,
-            lm[IRIS_IDX.rightBottomLid]!,
-          );
-          leftIrisVRatio = irisVerticalRatio(
-            lm[IRIS_IDX.leftIris]!,
-            lm[IRIS_IDX.leftTopLid]!,
-            lm[IRIS_IDX.leftBottomLid]!,
-          );
-          irisVCenterRatio = (rightIrisVRatio + leftIrisVRatio) / 2;
-
-          const rightEAR = eyeAspectRatio(
-            lm[IRIS_IDX.rightTopLid]!,
-            lm[IRIS_IDX.rightBottomLid]!,
-            lm[IRIS_IDX.rightInner]!,
-            lm[IRIS_IDX.rightOuter]!,
-          );
-          const leftEAR = eyeAspectRatio(
-            lm[IRIS_IDX.leftTopLid]!,
-            lm[IRIS_IDX.leftBottomLid]!,
-            lm[IRIS_IDX.leftInner]!,
-            lm[IRIS_IDX.leftOuter]!,
-          );
-          avgEAR = (rightEAR + leftEAR) / 2;
-          isBlink = avgEAR < BLINK_EAR_THRESHOLD;
-
-          if (
-            baselineHRef.current === null ||
-            baselineVRef.current === null
-          ) {
-            const s = baselineSamplesRef.current;
-            s.h.push(irisHCenterRatio);
-            s.v.push(irisVCenterRatio);
-            if (s.h.length >= BASELINE_SAMPLE_COUNT) {
-              const meanH =
-                s.h.reduce((a, b) => a + b, 0) / BASELINE_SAMPLE_COUNT;
-              const meanV =
-                s.v.reduce((a, b) => a + b, 0) / BASELINE_SAMPLE_COUNT;
-              baselineHRef.current = meanH;
-              baselineVRef.current = meanV;
-              s.h = [];
-              s.v = [];
-            }
-          }
-
-          if (baselineVRef.current !== null) {
-            verticalDeviationNum =
-              irisVCenterRatio - baselineVRef.current;
-          }
-
-          if (
-            baselineHRef.current !== null &&
-            baselineVRef.current !== null
-          ) {
-            const bH = baselineHRef.current;
-            const bV = baselineVRef.current;
-
-            if (isBlink) {
-              if (lastTickTimeRef.current === null) {
-                lastTickTimeRef.current = now;
-              } else {
-                lastTickTimeRef.current = now;
-              }
-            } else {
-              const rightHDev = Math.abs(rightIrisHRatio - bH);
-              const leftHDev = Math.abs(leftIrisHRatio - bH);
-              const maxHorizontalDeviation = Math.max(rightHDev, leftHDev);
-              const irisHCentered =
-                maxHorizontalDeviation < irisHToleranceRef.current;
-
-              const verticalDeviation = irisVCenterRatio - bV;
-              // Verify sign convention against live readings — flip if needed.
-              const lookingDown =
-                verticalDeviation < -irisDownToleranceRef.current;
-              const lookingUp =
-                verticalDeviation > irisUpToleranceRef.current;
-              const irisVCentered = !lookingDown && !lookingUp;
-
-              const headForward =
-                Math.abs(yaw) < yawThresholdRef.current &&
-                Math.abs(pitch) < pitchThresholdRef.current;
-              rawLooking = headForward && irisHCentered && irisVCentered;
-
-              const d = debouncedLookingRef.current;
-              if (rawLooking === d) {
-                pendingSinceRef.current = null;
-                pendingRawRef.current = null;
-              } else {
-                if (
-                  pendingSinceRef.current === null ||
-                  pendingRawRef.current !== rawLooking
-                ) {
-                  pendingSinceRef.current = now;
-                  pendingRawRef.current = rawLooking;
-                } else if (now - pendingSinceRef.current >= DEBOUNCE_MS) {
-                  const newDebounced = rawLooking;
-                  if (
-                    prevDebouncedLookingRef.current === true &&
-                    newDebounced === false
-                  ) {
-                    lookAwayEventsRef.current += 1;
-                  }
-                  debouncedLookingRef.current = newDebounced;
-                  prevDebouncedLookingRef.current = newDebounced;
-                  pendingSinceRef.current = null;
-                  pendingRawRef.current = null;
-                }
-              }
-
-              framesFaceDetectedRef.current += 1;
-              if (debouncedLookingRef.current) {
-                framesLookingWhileFaceRef.current += 1;
-              }
-
-              if (lastTickTimeRef.current === null) {
-                lastTickTimeRef.current = now;
-              } else {
-                const deltaMs = now - lastTickTimeRef.current;
-                lastTickTimeRef.current = now;
-                totalFaceMsRef.current += deltaMs;
-                if (!debouncedLookingRef.current) {
-                  lookAwayMsRef.current += deltaMs;
-                } else {
-                  lookAwayMsRef.current = 0;
-                }
-              }
-            }
-          } else {
-            if (lastTickTimeRef.current === null) {
-              lastTickTimeRef.current = now;
-            } else {
-              lastTickTimeRef.current = now;
-            }
-          }
-        } else {
-          pendingSinceRef.current = null;
-          pendingRawRef.current = null;
-          lastTickTimeRef.current = now;
-        }
-
-        const stillCalibrating =
-          baselineHRef.current === null || baselineVRef.current === null;
-
-        const debounced = debouncedLookingRef.current;
-        let indicator: ThrottledUi['indicator'] = 'gray';
-        let indicatorLabel = 'No face detected';
-        if (stillCalibrating) {
-          if (fullyValid) {
-            indicator = 'blue';
-            indicatorLabel = 'Calibrating... look at the camera';
-          } else {
-            indicator = 'gray';
-            indicatorLabel = 'No face detected — calibration paused';
-          }
-        } else if (fullyValid) {
-          indicator = debounced ? 'green' : 'red';
-          indicatorLabel = debounced ? 'Looking at camera' : 'Not looking';
-        }
-
-        const faceCount = framesFaceDetectedRef.current;
-        let eyeContactStr = '—';
-        if (faceCount >= MIN_FRAMES_FOR_EYE_CONTACT_RATIO) {
-          const pct =
-            (framesLookingWhileFaceRef.current / faceCount) * 100;
-          eyeContactStr = `${pct.toFixed(1)}%`;
-        }
-
-        const baselineHStr =
-          baselineHRef.current !== null
-            ? baselineHRef.current.toFixed(2)
-            : '—';
-        const baselineVStr =
-          baselineVRef.current !== null
-            ? baselineVRef.current.toFixed(2)
-            : '—';
-
-        const earStr = fullyValid ? avgEAR.toFixed(2) : '—';
-        const blinkStr = fullyValid ? (isBlink ? 'yes' : 'no') : 'no';
-        const verticalDeviationStr =
-          verticalDeviationNum !== null
-            ? verticalDeviationNum.toFixed(2)
-            : '—';
-
-        pendingUiRef.current = {
-          fps: fpsStr,
-          detection: detectionLine,
-          yaw: fullyValid ? yaw.toFixed(1) : '—',
-          pitch: fullyValid ? pitch.toFixed(1) : '—',
-          roll: fullyValid ? roll.toFixed(1) : '—',
-          irisHRight: fullyValid ? rightIrisHRatio.toFixed(2) : '—',
-          irisHLeft: fullyValid ? leftIrisHRatio.toFixed(2) : '—',
-          irisHAvg: fullyValid ? irisHCenterRatio.toFixed(2) : '—',
-          irisVRight: fullyValid ? rightIrisVRatio.toFixed(2) : '—',
-          irisVLeft: fullyValid ? leftIrisVRatio.toFixed(2) : '—',
-          irisVAvg: fullyValid ? irisVCenterRatio.toFixed(2) : '—',
-          baselineH: baselineHStr,
-          baselineV: baselineVStr,
-          ear: earStr,
-          blink: blinkStr,
-          verticalDeviation: verticalDeviationStr,
-          indicator,
-          indicatorLabel,
-          eyeContact: eyeContactStr,
-          lookAwayEvents: lookAwayEventsRef.current,
-          lookAwayMs: lookAwayMsRef.current,
-          totalFaceSec: (totalFaceMsRef.current / 1000).toFixed(1),
-        };
-
-        if (now - lastUiFlushRef.current >= UI_FLUSH_MS) {
-          lastUiFlushRef.current = now;
-          const snap = pendingUiRef.current;
-          if (snap) {
-            setThrottledUi(snap);
-          }
-        }
-      } catch (err) {
-        console.error('[gaze-prototype] detectForVideo', err);
-      }
-
-      requestAnimationFrame(tick);
-    };
-
-    requestAnimationFrame(tick);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [cameraReady, landmarkerReady, videoHasFrameData]);
-
-  const resetMetrics = () => {
-    framesFaceDetectedRef.current = 0;
-    framesLookingWhileFaceRef.current = 0;
-    lookAwayEventsRef.current = 0;
-    lookAwayMsRef.current = 0;
-    totalFaceMsRef.current = 0;
-    prevDebouncedLookingRef.current = debouncedLookingRef.current;
-    lastTickTimeRef.current = null;
-    setThrottledUi((u) => ({
-      ...u,
-      eyeContact: '—',
-      lookAwayEvents: 0,
-      lookAwayMs: 0,
-      totalFaceSec: '0.0',
-    }));
-  };
-
-  const recalibrateBaselines = () => {
-    baselineHRef.current = null;
-    baselineVRef.current = null;
-    baselineSamplesRef.current = { h: [], v: [] };
-    pendingSinceRef.current = null;
-    pendingRawRef.current = null;
-    setThrottledUi((u) => ({
-      ...u,
-      baselineH: '—',
-      baselineV: '—',
-    }));
-  };
+  const debug = state.debug;
 
   const indicatorColorClass =
-    throttledUi.indicator === 'green'
+    debug?.indicator === 'green'
       ? 'bg-emerald-500'
-      : throttledUi.indicator === 'red'
-        ? 'bg-red-500'
-        : throttledUi.indicator === 'blue'
-          ? 'bg-blue-500'
-          : 'bg-gray-500';
+      : debug?.indicator === 'amber'
+        ? 'bg-amber-500'
+        : debug?.indicator === 'red'
+          ? 'bg-red-500'
+          : debug?.indicator === 'blue'
+            ? 'bg-blue-500'
+            : 'bg-gray-500';
+
+  const eyeContactDisplay =
+    state.eyeContactRatio != null
+      ? `${state.eyeContactRatio.toFixed(1)}%`
+      : '—';
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6 text-gray-900 dark:text-gray-100">
@@ -718,7 +109,6 @@ export default function GazePrototypePage() {
             }}
           />
           <canvas
-            ref={canvasRef}
             width={640}
             height={480}
             className="pointer-events-none absolute inset-0 h-full w-full"
@@ -732,7 +122,7 @@ export default function GazePrototypePage() {
             aria-hidden
           />
           <p className="max-w-[12rem] text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
-            {throttledUi.indicatorLabel}
+            {debug?.indicatorLabel ?? '—'}
           </p>
         </div>
       </div>
@@ -751,7 +141,13 @@ export default function GazePrototypePage() {
             MediaPipe:{' '}
           </span>
           <span className="text-gray-900 dark:text-gray-100">
-            {mediaPipeStatus}
+            {state.landmarkerStatus === 'ready'
+              ? 'Ready'
+              : state.landmarkerStatus === 'loading'
+                ? 'Loading...'
+                : state.landmarkerStatus === 'error'
+                  ? `Error: ${state.landmarkerError ?? ''}`
+                  : 'Idle'}
           </span>
         </div>
         <div>
@@ -759,7 +155,7 @@ export default function GazePrototypePage() {
             Detection:{' '}
           </span>
           <span className="text-gray-900 dark:text-gray-100">
-            {throttledUi.detection}
+            {debug?.detection ?? '—'}
           </span>
         </div>
         <div>
@@ -767,7 +163,7 @@ export default function GazePrototypePage() {
             FPS:{' '}
           </span>
           <span className="tabular-nums text-gray-900 dark:text-gray-100">
-            {throttledUi.fps}
+            {debug?.fps ?? '—'}
           </span>
         </div>
       </div>
@@ -779,146 +175,53 @@ export default function GazePrototypePage() {
         <p className="text-gray-700 dark:text-gray-300">
           Yaw:{' '}
           <span className="tabular-nums text-gray-900 dark:text-white">
-            {throttledUi.yaw}°
+            {debug?.yaw ?? '—'}°
           </span>{' '}
           · Pitch:{' '}
           <span className="tabular-nums text-gray-900 dark:text-white">
-            {throttledUi.pitch}°
+            {debug?.pitch ?? '—'}°
           </span>{' '}
           · Roll:{' '}
           <span className="tabular-nums text-gray-900 dark:text-white">
-            {throttledUi.roll}°
+            {debug?.roll ?? '—'}°
           </span>
         </p>
         <p className="text-gray-700 dark:text-gray-300">
           Iris horizontal (R / L / avg):{' '}
           <span className="tabular-nums text-gray-900 dark:text-white">
-            {throttledUi.irisHRight} / {throttledUi.irisHLeft} /{' '}
-            {throttledUi.irisHAvg}
+            {debug?.irisHRight} / {debug?.irisHLeft} / {debug?.irisHAvg}
           </span>
         </p>
         <p className="text-gray-700 dark:text-gray-300">
           Iris vertical (R / L / avg):{' '}
           <span className="tabular-nums text-gray-900 dark:text-white">
-            {throttledUi.irisVRight} / {throttledUi.irisVLeft} /{' '}
-            {throttledUi.irisVAvg}
+            {debug?.irisVRight} / {debug?.irisVLeft} / {debug?.irisVAvg}
           </span>
         </p>
         <p className="text-gray-700 dark:text-gray-300">
           Baseline H / V:{' '}
           <span className="tabular-nums text-gray-900 dark:text-white">
-            {throttledUi.baselineH} / {throttledUi.baselineV}
+            {debug?.baselineH} / {debug?.baselineV}
           </span>
         </p>
         <p className="text-gray-700 dark:text-gray-300">
           EAR:{' '}
           <span className="tabular-nums text-gray-900 dark:text-white">
-            {throttledUi.ear}
+            {debug?.ear}
           </span>
         </p>
         <p className="text-gray-700 dark:text-gray-300">
           Blink:{' '}
           <span className="tabular-nums text-gray-900 dark:text-white">
-            {throttledUi.blink}
+            {debug?.blink}
           </span>
         </p>
         <p className="text-gray-700 dark:text-gray-300">
           Vertical deviation:{' '}
           <span className="tabular-nums text-gray-900 dark:text-white">
-            {throttledUi.verticalDeviation}
+            {debug?.verticalDeviation}
           </span>
         </p>
-      </div>
-
-      <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-950/40">
-        <p className="font-semibold text-gray-800 dark:text-gray-200">
-          Thresholds
-        </p>
-        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
-          <span className="min-w-[10rem] text-gray-700 dark:text-gray-300">
-            Yaw threshold (5–30°)
-          </span>
-          <input
-            type="range"
-            min={5}
-            max={30}
-            step={1}
-            value={yawThreshold}
-            onChange={(e) => setYawThreshold(Number(e.target.value))}
-            className="flex-1"
-          />
-          <span className="tabular-nums text-gray-900 dark:text-white">
-            {yawThreshold}°
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
-          <span className="min-w-[10rem] text-gray-700 dark:text-gray-300">
-            Pitch threshold (5–25°)
-          </span>
-          <input
-            type="range"
-            min={5}
-            max={25}
-            step={1}
-            value={pitchThreshold}
-            onChange={(e) => setPitchThreshold(Number(e.target.value))}
-            className="flex-1"
-          />
-          <span className="tabular-nums text-gray-900 dark:text-white">
-            {pitchThreshold}°
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
-          <span className="min-w-[10rem] text-gray-700 dark:text-gray-300">
-            Horizontal iris tolerance (0.05–0.30)
-          </span>
-          <input
-            type="range"
-            min={0.05}
-            max={0.3}
-            step={0.01}
-            value={irisHTolerance}
-            onChange={(e) => setIrisHTolerance(Number(e.target.value))}
-            className="flex-1"
-          />
-          <span className="tabular-nums text-gray-900 dark:text-white">
-            {irisHTolerance.toFixed(2)}
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
-          <span className="min-w-[10rem] text-gray-700 dark:text-gray-300">
-            Vertical DOWN tolerance (0.05–0.30)
-          </span>
-          <input
-            type="range"
-            min={0.05}
-            max={0.3}
-            step={0.01}
-            value={irisDownTolerance}
-            onChange={(e) => setIrisDownTolerance(Number(e.target.value))}
-            className="flex-1"
-          />
-          <span className="tabular-nums text-gray-900 dark:text-white">
-            {irisDownTolerance.toFixed(2)}
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
-          <span className="min-w-[10rem] text-gray-700 dark:text-gray-300">
-            Vertical UP tolerance (0.05–0.30)
-          </span>
-          <input
-            type="range"
-            min={0.05}
-            max={0.3}
-            step={0.01}
-            value={irisUpTolerance}
-            onChange={(e) => setIrisUpTolerance(Number(e.target.value))}
-            className="flex-1"
-          />
-          <span className="tabular-nums text-gray-900 dark:text-white">
-            {irisUpTolerance.toFixed(2)}
-          </span>
-        </label>
       </div>
 
       <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/90 p-4 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-900/80">
@@ -930,14 +233,14 @@ export default function GazePrototypePage() {
             <button
               type="button"
               className="rounded border border-blue-500 px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/50"
-              onClick={recalibrateBaselines}
+              onClick={() => controls.recalibrate()}
             >
               Recalibrate
             </button>
             <button
               type="button"
               className="rounded border border-gray-500 px-3 py-1 text-xs font-medium text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800"
-              onClick={resetMetrics}
+              onClick={() => controls.resetMetrics()}
             >
               Reset metrics
             </button>
@@ -946,25 +249,25 @@ export default function GazePrototypePage() {
         <p className="text-gray-700 dark:text-gray-300">
           Eye contact ratio:{' '}
           <span className="font-medium text-gray-900 dark:text-white">
-            {throttledUi.eyeContact}
+            {eyeContactDisplay}
           </span>
         </p>
         <p className="text-gray-700 dark:text-gray-300">
           Look-away events:{' '}
           <span className="tabular-nums font-medium text-gray-900 dark:text-white">
-            {throttledUi.lookAwayEvents}
+            {state.lookAwayEvents}
           </span>
         </p>
         <p className="text-gray-700 dark:text-gray-300">
           Current look-away duration:{' '}
           <span className="tabular-nums font-medium text-gray-900 dark:text-white">
-            {(throttledUi.lookAwayMs / 1000).toFixed(1)} s
+            {((debug?.lookAwayMs ?? 0) / 1000).toFixed(1)} s
           </span>
         </p>
         <p className="text-gray-700 dark:text-gray-300">
           Total face-detected time:{' '}
           <span className="tabular-nums font-medium text-gray-900 dark:text-white">
-            {throttledUi.totalFaceSec} s
+            {debug?.totalFaceSec ?? '0.0'} s
           </span>
         </p>
       </div>
