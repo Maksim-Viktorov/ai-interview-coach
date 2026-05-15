@@ -598,20 +598,22 @@ export function AnswerForm({
         <audio controls src={audioUrl} className="w-full" />
       ) : null}
 
-      <div className="space-y-2">
-        <textarea
-          className="min-h-32 w-full rounded border p-3"
-          placeholder="Type your answer here..."
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          aria-label="Answer"
-        />
-        {analytics !== null && !transcribing && feedback === null ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Answer transcribed — review and click Submit to see your analytics
-          </p>
-        ) : null}
-      </div>
+      {!(feedback !== null && analytics !== null) ? (
+        <div className="space-y-2">
+          <textarea
+            className="min-h-32 w-full rounded border p-3"
+            placeholder="Type your answer here..."
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            aria-label="Answer"
+          />
+          {analytics !== null && !transcribing && feedback === null ? (
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Answer transcribed — review and click Submit to see your analytics
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <p className="text-sm text-red-600" role="alert">
@@ -622,90 +624,88 @@ export function AnswerForm({
       {feedback ? (
         <div ref={feedbackRef} className="space-y-6" role="status">
           {analytics ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div
-                  className="min-h-32 w-full rounded border p-3 text-left leading-relaxed"
-                  aria-label="Answer transcript with filler highlights"
-                >
-                  <HighlightedTranscript text={answer} />
-                </div>
-              </div>
-
-              <section className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 shadow-sm dark:border-gray-600 dark:bg-gray-900/80">
-                <h3 className="text-base font-semibold tracking-tight text-gray-950 dark:text-white">
-                  Speech Analytics
-                </h3>
-
-                {(() => {
-                  const wpmFinite = Number.isFinite(analytics.speakingRateWpm);
-                  const wpmHeadline = wpmFinite
-                    ? `${Math.round(analytics.speakingRateWpm)} WPM`
-                    : '—';
-                  const pa = analytics.consistency.pacingAnalysis;
-                  const curve = pacingCurveDescriptor(pa.shape);
-                  const paceOverTimeData =
-                    analytics.consistency.pacingWindows.map((p) => ({
-                      time: p.midTime,
-                      wpm: p.wpm,
-                    }));
-
-                  const dynamismFooter =
-                    curve == null ? null : (
-                      <div className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-                        <p className="font-medium text-gray-800 dark:text-gray-200">
-                          Curve shape: {curve.label}
-                        </p>
-                        <p className="mt-0.5">{curve.helper}</p>
-                      </div>
-                    );
-
-                  return (
-                    <>
-                      <div className="mt-4 flex flex-wrap items-baseline gap-2">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
-                          Speaking rate
-                        </span>
-                        <span className="text-lg font-bold tabular-nums text-gray-950 dark:text-white">
-                          {wpmHeadline}
-                        </span>
-                      </div>
-
-                      {coachScorecard ? (
-                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                          <DimensionScoreCard
-                            title="Pace"
-                            dim={coachScorecard.pace}
-                          />
-                          <DimensionScoreCard
-                            title="Fluency"
-                            dim={coachScorecard.fluency}
-                          />
-                          <DimensionScoreCard
-                            title="Cleanliness"
-                            dim={coachScorecard.cleanliness}
-                          />
-                          <DimensionScoreCard
-                            title="Dynamism"
-                            dim={coachScorecard.dynamism}
-                            footer={dynamismFooter}
-                          />
-                        </div>
-                      ) : (
-                        <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                          Delivery scorecard was not returned for this
-                          transcription.
-                        </p>
-                      )}
-
-                      <div className="mt-6">
-                        <SpeakingPaceOverTimeChart data={paceOverTimeData} />
-                      </div>
-                    </>
-                  );
-                })()}
-              </section>
+            <div
+              className="min-h-32 w-full rounded border p-3 text-left leading-relaxed"
+              aria-label="Answer transcript with filler highlights"
+            >
+              <HighlightedTranscript text={answer} />
             </div>
+          ) : null}
+
+          {analytics ? (
+            <section className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 shadow-sm dark:border-gray-600 dark:bg-gray-900/80">
+              <h3 className="text-base font-semibold tracking-tight text-gray-950 dark:text-white">
+                Speech Analytics
+              </h3>
+
+              {(() => {
+                const wpmFinite = Number.isFinite(analytics.speakingRateWpm);
+                const wpmHeadline = wpmFinite
+                  ? `${Math.round(analytics.speakingRateWpm)} WPM`
+                  : '—';
+                const pa = analytics.consistency.pacingAnalysis;
+                const curve = pacingCurveDescriptor(pa.shape);
+                const paceOverTimeData =
+                  analytics.consistency.pacingWindows.map((p) => ({
+                    time: p.midTime,
+                    wpm: p.wpm,
+                  }));
+
+                const dynamismFooter =
+                  curve == null ? null : (
+                    <div className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+                      <p className="font-medium text-gray-800 dark:text-gray-200">
+                        Curve shape: {curve.label}
+                      </p>
+                      <p className="mt-0.5">{curve.helper}</p>
+                    </div>
+                  );
+
+                return (
+                  <>
+                    <div className="mt-4 flex flex-wrap items-baseline gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                        Speaking rate
+                      </span>
+                      <span className="text-lg font-bold tabular-nums text-gray-950 dark:text-white">
+                        {wpmHeadline}
+                      </span>
+                    </div>
+
+                    {coachScorecard ? (
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <DimensionScoreCard
+                          title="Pace"
+                          dim={coachScorecard.pace}
+                        />
+                        <DimensionScoreCard
+                          title="Fluency"
+                          dim={coachScorecard.fluency}
+                        />
+                        <DimensionScoreCard
+                          title="Cleanliness"
+                          dim={coachScorecard.cleanliness}
+                        />
+                        <DimensionScoreCard
+                          title="Dynamism"
+                          dim={coachScorecard.dynamism}
+                          footer={dynamismFooter}
+                        />
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                        Delivery scorecard was not returned for this
+                        transcription.
+                      </p>
+                    )}
+
+                    <div className="mt-6">
+                      <SpeakingPaceOverTimeChart data={paceOverTimeData} />
+                    </div>
+                  </>
+                );
+              })()}
+            </section>
           ) : null}
 
           <EngagementSection metrics={capturedEngagement} />
