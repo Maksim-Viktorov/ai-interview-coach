@@ -2,11 +2,18 @@ import Link from 'next/link';
 import { InterviewFlow, type RecentAnswer } from '@/components/interview/interview-flow';
 import { supabaseServer } from '@/lib/supabase-server';
 
-const questions = [
-  'Tell me about a technical challenge you faced and how you solved it.',
-  'Describe a time you had to debug a difficult problem. What was your process?',
-  'Tell me about a time you disagreed with a teammate. How did you handle it?',
-];
+type QuestionRow = {
+  id: string;
+  text: string;
+};
+
+type SessionRow = {
+  id: string;
+  created_at: string;
+  interview_type: string;
+  status: string;
+  question_ids?: string[] | null;
+};
 
 export default async function Page({
   params,
@@ -34,6 +41,63 @@ export default async function Page({
       </main>
     );
   }
+
+  const s = session as SessionRow;
+  const rawIds = s.question_ids;
+  if (!Array.isArray(rawIds) || rawIds.length !== 3) {
+    return (
+      <main className="p-8 space-y-6">
+        <p className="mb-4">This session is missing question data</p>
+        <Link
+          href="/"
+          className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
+        >
+          Back to home
+        </Link>
+      </main>
+    );
+  }
+
+  const { data: questionRows, error: qErr } = await supabaseServer
+    .from('questions')
+    .select('id, text')
+    .in('id', rawIds);
+
+  if (qErr || !questionRows) {
+    return (
+      <main className="p-8 space-y-6">
+        <p className="mb-4">This session is missing question data</p>
+        <Link
+          href="/"
+          className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
+        >
+          Back to home
+        </Link>
+      </main>
+    );
+  }
+
+  const rows = questionRows as QuestionRow[];
+  const orderedQuestions = rawIds
+    .map((qid) => rows.find((q) => q.id === qid))
+    .filter((q): q is QuestionRow => q != null);
+
+  if (orderedQuestions.length !== 3) {
+    return (
+      <main className="p-8 space-y-6">
+        <p className="mb-4">This session is missing question data</p>
+        <Link
+          href="/"
+          className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
+        >
+          Back to home
+        </Link>
+      </main>
+    );
+  }
+
+  const questionTexts = orderedQuestions.map((q) => q.text);
+  const questionIdsList = orderedQuestions.map((q) => q.id);
 
   const { data: answersData } = await supabaseServer
     .from('interview_answers')
@@ -83,7 +147,8 @@ export default async function Page({
       </ul>
       <InterviewFlow
         sessionId={session.id}
-        questions={questions}
+        questions={questionTexts}
+        questionIds={questionIdsList}
         recentAnswers={recentAnswers}
       />
 

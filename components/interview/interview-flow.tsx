@@ -93,12 +93,14 @@ function parseFeedbackDisplay(raw: string | null): ParsedFeedbackDisplay {
 type InterviewFlowProps = {
   sessionId: string;
   questions: string[];
+  questionIds: string[];
   recentAnswers?: RecentAnswer[];
 };
 
 export function InterviewFlow({
   sessionId,
   questions,
+  questionIds,
   recentAnswers = [],
 }: InterviewFlowProps) {
   const router = useRouter();
@@ -118,8 +120,12 @@ export function InterviewFlow({
     }
   }, [currentQuestionIndex, questions.length, router]);
 
-  if (questions.length === 0) {
-    return null;
+  if (questions.length === 0 || questions.length !== questionIds.length) {
+    return (
+      <p className="text-sm text-red-600" role="alert">
+        Invalid question configuration for this session.
+      </p>
+    );
   }
 
   if (currentQuestionIndex >= questions.length) {
@@ -260,6 +266,7 @@ export function InterviewFlow({
   }
 
   const currentQuestion = questions[currentQuestionIndex];
+  const currentQuestionId = questionIds[currentQuestionIndex];
   const total = questions.length;
   const displayNumber = currentQuestionIndex + 1;
 
@@ -280,6 +287,7 @@ export function InterviewFlow({
         key={currentQuestionIndex}
         sessionId={sessionId}
         question={currentQuestion}
+        questionId={currentQuestionId!}
         questionNumber={displayNumber}
         onSubmitted={() => setSubmittedCurrentQuestion(true)}
       />

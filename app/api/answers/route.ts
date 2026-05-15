@@ -24,6 +24,7 @@ type GazeMetricsPayload = {
 type AnswersRequestBody = {
   sessionId?: string;
   question?: string;
+  questionId?: string;
   answer?: string;
   speechMetrics?: SpeechMetricsPayload | null;
   scorecard?: unknown;
@@ -168,6 +169,7 @@ export async function POST(request: Request) {
   const {
     sessionId,
     question,
+    questionId,
     answer,
     speechMetrics,
     scorecard,
@@ -233,6 +235,7 @@ export async function POST(request: Request) {
       {
         session_id: sessionId,
         question,
+        question_id: questionId ?? null,
         answer,
         feedback,
         speech_metrics: speechMetrics ?? null,

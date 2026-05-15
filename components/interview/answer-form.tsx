@@ -152,6 +152,7 @@ function pacingCurveDescriptor(shape: PacingAnalysis['shape']): {
 type AnswerFormProps = {
   sessionId: string;
   question: string;
+  questionId: string;
   questionNumber: number;
   onSubmitted?: () => void;
 };
@@ -179,6 +180,7 @@ type MetricsState =
 export function AnswerForm({
   sessionId,
   question,
+  questionId,
   questionNumber,
   onSubmitted,
 }: AnswerFormProps) {
@@ -501,6 +503,7 @@ export function AnswerForm({
         body: JSON.stringify({
           sessionId,
           question,
+          questionId,
           answer,
           speechMetrics: metrics,
           scorecard: coachScorecard ?? undefined,
