@@ -16,7 +16,7 @@ Active development. The speech analytics pipeline and four-dimension scorecard a
   - **Cleanliness** — Filler density per 100 words.
   - **Dynamism** — Peaks per minute on a sliding-window WPM curve.
 - **Speaking pace chart** — Sliding-window WPM over time with an ideal-range reference band and x-axis ticks at even seconds.
-- **AI-generated feedback** — After submit, responses are evaluated server-side and returned as three cards (**Strength**, **Improvement**, **Suggestion**) styled to match the analytics scorecard.
+- **AI-generated feedback** — After submit, responses are evaluated server-side (using the delivery scorecard when available) and returned as three cards (**Strength**, **Improvement**, **Suggestion**) styled to match the analytics scorecard.
 - **Interview session flow** — Multi-step interview experience with persistent sessions and a guided completion flow.
 - **Gaze detection (prototype)** — **`/gaze-prototype`**: browser-side **MediaPipe Face Landmarker** (WASM) for real-time head pose and dual-axis iris tracking, with per-user baseline calibration, blink filtering (Eye Aspect Ratio), and asymmetric vertical thresholds. Not wired into the main interview flow.
 - **Calibration tooling** — **`scripts/calibration/`**: batch reference recordings through the production analytics pipeline (`npm run calibrate`), then summarize per-metric distributions and Cohen's d separation between labeled groups (`npm run calibrate:analyse`).
@@ -39,7 +39,7 @@ Active development. The speech analytics pipeline and four-dimension scorecard a
    - Audio is recorded in the browser
    - Sent to the server and transcribed via **Deepgram** (API route)
 4. Transcript and timing metadata feed the **four-dimension scorecard** and pace chart; metrics are computed and displayed before submit.
-5. Submit the answer to receive structured AI feedback on content.
+5. Submit the answer to receive structured AI feedback; for voice answers, the scorecard is saved and included in the feedback prompt.
 6. Continue until all questions are completed.
 
 ## Getting Started
@@ -86,7 +86,7 @@ You will need the matching **Supabase schema** (`interview_sessions`, `interview
 
 - **Empirical threshold calibration** — Scoring thresholds are tuned against a labeled corpus of reference recordings (strong, mediocre, weak) using Cohen's d separation analysis rather than published norms. The calibration script reuses production code, so calibration numbers match what users see.
 - **Sliding window over fixed time buckets** — WPM-over-time uses overlapping word windows rather than fixed time buckets. Buckets created boundary artifacts where pauses landed near edges; windows produce smoother curves independent of where buckets fall.
-- **Four independent dimension scores, no aggregate** — A single "delivery score" would average away meaningful weaknesses. Separate Pace, Fluency, Cleanliness, and Dynamism scores let users see exactly where they're strong vs weak.
+- **Four independent dimension scores, no aggregate** — A single "delivery score" would average away meaningful weaknesses. Separate Pace, Fluency, Cleanliness, and Dynamism scores let users see exactly where they're strong vs weak; on submit the scorecard is persisted in `delivery_scorecard` and passed into the OpenAI feedback prompt when a voice answer was transcribed.
 - **Server-side AI calls** — OpenAI and Deepgram requests are handled via API routes to keep API keys secure.
 - **Per-user baseline for gaze detection** — Iris-position-as-"centered" varies per person and camera angle. The prototype calibrates the user's neutral iris position during the first ~1 second of face detection and computes deviations from that baseline rather than assuming an idealized center.
 
@@ -99,4 +99,3 @@ Built to explore whether webcam-based delivery analytics can offer interview fee
 - **Gaze detection integration** — Wire the existing `/gaze-prototype` page into the main interview flow with eye-contact ratio displayed alongside the speech scorecard.
 - **Question bank and session structure** — Currently questions are basic; build out a curated bank with category tags (technical, leadership, conflict) and multi-question session flow.
 - **Historical progress tracking** — Per-user trend view showing dimension scores over time so users can see improvement across practice sessions.
-- **AI feedback that uses metric data** — Pass the scorecard into the LLM prompt so feedback can cross-reference content quality against delivery patterns.

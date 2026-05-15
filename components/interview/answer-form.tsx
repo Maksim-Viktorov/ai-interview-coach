@@ -423,6 +423,8 @@ export function AnswerForm({
           question,
           answer,
           speechMetrics: metrics,
+          scorecard: coachScorecard ?? undefined,
+          analytics: analytics ?? undefined,
         }),
       });
 
