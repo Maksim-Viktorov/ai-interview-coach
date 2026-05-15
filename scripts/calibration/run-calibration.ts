@@ -14,7 +14,7 @@
  *    check current Deepgram pricing).
  *
  * Analytics: calls `analyzeDeepgramSpeech` from `lib/deepgram-analytics.ts` with the same
- * `{ utterances, words }` as production (via `lib/deepgram-client.ts`).
+ * `{ utterances, words, transcript }` as production (via `lib/deepgram-client.ts`).
  */
 
 import { config as loadEnv } from 'dotenv';
@@ -123,8 +123,12 @@ async function main() {
         basename(file),
         contentType,
       );
-      const { words, utterances } = normalizeDeepgramResponse(response);
-      const analytics = analyzeDeepgramSpeech({ utterances, words });
+      const { text, words, utterances } = normalizeDeepgramResponse(response);
+      const analytics = analyzeDeepgramSpeech({
+        utterances,
+        words,
+        transcript: text,
+      });
 
       qualityCounts[quality] += 1;
 

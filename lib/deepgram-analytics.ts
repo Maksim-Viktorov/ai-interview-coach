@@ -1,35 +1,7 @@
+import { countFillersInText } from '@/lib/filler-detection';
+
 const MIN_PAUSE_SECONDS = 0.8;
 const LONG_PAUSE_SECONDS = 1.5;
-
-/** Deepgram-style fillers; compare after `normalizeSpokenToken`. */
-const FILLER_WORDS_RAW = [
-  'uh',
-  'um',
-  'mhmm',
-  'mm-mm',
-  'uh-uh',
-  'uh-huh',
-  'nuh-uh',
-] as const;
-
-function normalizeSpokenToken(word: string): string {
-  return word.toLowerCase().replace(/[^\w-]/g, '').trim();
-}
-
-const FILLER_TOKENS_NORMALIZED = new Set(
-  FILLER_WORDS_RAW.map((w) => normalizeSpokenToken(w)),
-);
-
-function countFillerWords(words: DeepgramWord[]): number {
-  let n = 0;
-  for (const w of words) {
-    const t = normalizeSpokenToken(w.word);
-    if (t && FILLER_TOKENS_NORMALIZED.has(t)) {
-      n += 1;
-    }
-  }
-  return n;
-}
 
 export type DeepgramUtterance = {
   start: number;
@@ -400,8 +372,9 @@ function computePacingConsistency(validWords: DeepgramWord[]): DeepgramConsisten
 export function analyzeDeepgramSpeech(options: {
   utterances: DeepgramUtterance[];
   words: DeepgramWord[];
+  transcript: string;
 }): DeepgramAnalytics {
-  const { utterances, words } = options;
+  const { utterances, words, transcript } = options;
 
   if (!Array.isArray(utterances) || utterances.length === 0) {
     return emptyAnalytics();
@@ -527,7 +500,7 @@ export function analyzeDeepgramSpeech(options: {
   const meanRunLength =
     totalWords > 0 ? round2(totalWords / (pauseCount + 1)) : 0;
 
-  const fillerCount = countFillerWords(validWords);
+  const fillerCount = countFillersInText(transcript);
   const fillerDensityPer100Words =
     totalWords > 0 ? round2((fillerCount / totalWords) * 100) : 0;
 

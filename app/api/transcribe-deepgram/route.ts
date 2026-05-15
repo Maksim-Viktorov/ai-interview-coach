@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     const analytics = analyzeDeepgramSpeech({
       utterances,
       words,
+      transcript: text,
     });
 
     console.log('[deepgram] analytics summary', {

@@ -104,12 +104,12 @@ function computeFluencyDimension(analytics: DeepgramAnalytics): DimensionScore {
 function cleanlinessScore(density: number): number {
   const d = density;
   if (!Number.isFinite(d) || d < 0) return 0;
-  if (d <= 2) return 100;
-  if (d <= 5) {
-    return linearMap(d, 2, 5, 100, 60);
+  if (d <= 3) return 100;
+  if (d <= 7) {
+    return linearMap(d, 3, 7, 100, 60);
   }
-  if (d <= 10) {
-    return linearMap(d, 5, 10, 60, 0);
+  if (d <= 12) {
+    return linearMap(d, 7, 12, 60, 0);
   }
   return 0;
 }
@@ -124,7 +124,7 @@ function cleanlinessLabelComment(score: number): Pick<DimensionScore, 'label' | 
   if (score >= 60) {
     return {
       label: 'Mostly clean',
-      comment: 'A few filler words but not distracting',
+      comment: 'Some filler words but not distracting',
     };
   }
   return {

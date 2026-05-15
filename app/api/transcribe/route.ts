@@ -1,37 +1,6 @@
 import { NextResponse } from 'next/server';
+import { countFillersInText } from '@/lib/filler-detection';
 import { openai } from '@/lib/openai';
-
-const FILLER_PHRASES = [
-  'um',
-  'uh',
-  'like',
-  'you know',
-  'actually',
-  'basically',
-] as const;
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function countFillerOccurrences(input: string): number {
-  const lower = input.toLowerCase();
-  let total = 0;
-
-  for (const phrase of FILLER_PHRASES) {
-    const pattern = phrase
-      .split(/\s+/)
-      .map(escapeRegExp)
-      .join('\\s+');
-    const re = new RegExp(`\\b${pattern}\\b`, 'gi');
-    const matches = lower.match(re);
-    if (matches) {
-      total += matches.length;
-    }
-  }
-
-  return total;
-}
 
 export async function POST(request: Request) {
   const formData = await request.formData();
@@ -94,7 +63,7 @@ export async function POST(request: Request) {
     paceFeedback = 'Your speaking pace is good.';
   }
 
-  const fillerCount = countFillerOccurrences(text);
+  const fillerCount = countFillersInText(text);
 
   let fillerFeedback: string;
   if (fillerCount === 0) {

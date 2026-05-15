@@ -1,41 +1,26 @@
 'use client';
 
 import type { ReactNode } from 'react';
-
-const FILLER_PHRASES = [
-  'um',
-  'uh',
-  'like',
-  'you know',
-  'actually',
-  'basically',
-] as const;
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { findFillerRanges } from '@/lib/filler-detection';
 
 function highlightFillerWords(transcript: string): ReactNode {
   if (!transcript) return null;
 
-  const phrases = [...FILLER_PHRASES].sort((a, b) => b.length - a.length);
-  const union = phrases
-    .map((phrase) => {
-      const inner = phrase.split(/\s+/).map(escapeRegExp).join('\\s+');
-      return `${inner}`;
-    })
-    .join('|');
-  const re = new RegExp(`(\\b(?:${union})\\b)`, 'gi');
+  const ranges = findFillerRanges(transcript);
+  if (ranges.length === 0) {
+    return transcript;
+  }
 
   const nodes: ReactNode[] = [];
   let key = 0;
   let lastIndex = 0;
-  let m: RegExpExecArray | null;
 
-  while ((m = re.exec(transcript)) !== null) {
-    if (m.index > lastIndex) {
+  for (const range of ranges) {
+    if (range.start > lastIndex) {
       nodes.push(
-        <span key={`t-${key++}`}>{transcript.slice(lastIndex, m.index)}</span>,
+        <span key={`t-${key++}`}>
+          {transcript.slice(lastIndex, range.start)}
+        </span>,
       );
     }
     nodes.push(
@@ -43,10 +28,10 @@ function highlightFillerWords(transcript: string): ReactNode {
         key={`f-${key++}`}
         className="bg-yellow-200 text-black px-1 rounded"
       >
-        {m[1]}
+        {range.text}
       </span>,
     );
-    lastIndex = m.index + m[1].length;
+    lastIndex = range.end;
   }
 
   if (lastIndex < transcript.length) {
