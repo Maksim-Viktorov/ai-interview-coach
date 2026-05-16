@@ -11,6 +11,9 @@ import {
   YAxis,
 } from 'recharts';
 
+const IDEAL_PACE_WPM_MIN = 180;
+const IDEAL_PACE_WPM_MAX = 230;
+
 export type PaceChartPoint = { time: number; wpm: number };
 
 type SpeakingPaceOverTimeChartProps = {
@@ -26,8 +29,8 @@ export function SpeakingPaceOverTimeChart({
 
   const sorted = [...data].sort((a, b) => a.time - b.time);
   const wpmVals = sorted.map((d) => d.wpm);
-  const minWpm = Math.min(...wpmVals, 130);
-  const maxWpm = Math.max(...wpmVals, 170);
+  const minWpm = Math.min(...wpmVals, IDEAL_PACE_WPM_MIN);
+  const maxWpm = Math.max(...wpmVals, IDEAL_PACE_WPM_MAX);
   const pad = Math.max(12, (maxWpm - minWpm) * 0.1);
   const yMin = Math.max(0, Math.floor(minWpm - pad));
   const yMax = Math.ceil(maxWpm + pad);
@@ -64,8 +67,8 @@ export function SpeakingPaceOverTimeChart({
             margin={{ top: 10, right: 10, left: 2, bottom: 4 }}
           >
             <ReferenceArea
-              y1={130}
-              y2={170}
+              y1={IDEAL_PACE_WPM_MIN}
+              y2={IDEAL_PACE_WPM_MAX}
               fill="#22c55e"
               fillOpacity={0.1}
               stroke="none"
