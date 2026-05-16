@@ -3,6 +3,7 @@ import type { DeepgramAnalytics } from '@/lib/deepgram-analytics';
 import type { DimensionScorecard } from '@/lib/dimension-scoring';
 import { openai } from '@/lib/openai';
 import { requireAuthUser } from '@/lib/auth-api';
+import { isValidDeepgramAnalytics } from '@/lib/session-summary';
 
 type SpeechMetricsPayload = {
   wordCount: number;
@@ -212,8 +213,24 @@ export async function POST(request: Request) {
     }
   }
 
+  let resolvedAnalytics: DeepgramAnalytics | null = null;
+  if (analytics !== undefined && analytics !== null) {
+    if (isValidDeepgramAnalytics(analytics)) {
+      resolvedAnalytics = analytics;
+    } else {
+      console.warn(
+        '[answers] malformed analytics in request body — storing null',
+      );
+    }
+  }
+
   const prompt = resolvedScorecard
-    ? buildMetricAwarePrompt(question, answer, resolvedScorecard, analytics)
+    ? buildMetricAwarePrompt(
+        question,
+        answer,
+        resolvedScorecard,
+        resolvedAnalytics,
+      )
     : buildContentOnlyPrompt(question, answer);
 
   let parsed: ParsedFeedback;
@@ -247,6 +264,7 @@ export async function POST(request: Request) {
         feedback,
         speech_metrics: speechMetrics ?? null,
         delivery_scorecard: resolvedScorecard,
+        delivery_analytics: resolvedAnalytics,
         gaze_metrics: resolvedGaze,
       },
     ])

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { InterviewFlow, type RecentAnswer } from '@/components/interview/interview-flow';
+import { InterviewFlow } from '@/components/interview/interview-flow';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { AuthHeader } from '@/components/auth/header';
 
@@ -102,33 +102,6 @@ export default async function Page({
   const questionTexts = orderedQuestions.map((q) => q.text);
   const questionIdsList = orderedQuestions.map((q) => q.id);
 
-  const { data: answersData } = await supabase
-    .from('interview_answers')
-    .select('id, question, answer, feedback, speech_metrics')
-    .eq('session_id', id)
-    .order('created_at', { ascending: false })
-    .limit(3);
-
-  const recentAnswers: RecentAnswer[] = (answersData ?? []).map((row) => {
-    const r = row as {
-      id: string;
-      question: string;
-      answer: string;
-      feedback: string | null;
-      speech_metrics: unknown;
-    };
-    return {
-      id: r.id,
-      question: r.question,
-      answer: r.answer,
-      feedback:
-        typeof r.feedback === 'string' && r.feedback.length > 0
-          ? r.feedback
-          : null,
-      speechMetrics: r.speech_metrics ?? null,
-    };
-  });
-
   return (
     <>
       <AuthHeader />
@@ -154,7 +127,6 @@ export default async function Page({
         sessionId={session.id}
         questions={questionTexts}
         questionIds={questionIdsList}
-        recentAnswers={recentAnswers}
       />
 
       <Link

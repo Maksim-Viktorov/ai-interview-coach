@@ -1,153 +1,22 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { HighlightedTranscript } from '@/components/interview/highlighted-transcript';
 import { CameraPreview } from '@/components/interview/camera-preview';
 import { EngagementSection } from '@/components/interview/engagement-section';
+import { CoachFeedbackSection } from '@/components/interview/coach-ui';
+import { SpeechAnalyticsSection } from '@/components/interview/speech-analytics-section';
 import {
   analyzePausesFromSamples,
   type PauseMetrics,
 } from '@/lib/pause-analysis';
-import type { DeepgramAnalytics, PacingAnalysis } from '@/lib/deepgram-analytics';
-import type { DeepgramCoachFeedback, DimensionScore } from '@/lib/deepgram-coach';
-import { SpeakingPaceOverTimeChart } from '@/components/interview/speaking-pace-over-time-chart';
+import type { DeepgramAnalytics } from '@/lib/deepgram-analytics';
+import type { DeepgramCoachFeedback } from '@/lib/deepgram-coach';
 import {
   useGazeTracking,
   type GazeMetricsSnapshot,
 } from '@/hooks/useGazeTracking';
 
-const cardShellClass =
-  'flex flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-600 dark:bg-gray-950/40';
-
-/** Coach feedback cards only: larger padding than scorecard; shell otherwise matches. */
-const coachCardShellClass =
-  'flex flex-col rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-600 dark:bg-gray-950/40';
-
-function scoreColorClass(score: number): string {
-  if (score >= 85) return 'bg-emerald-500';
-  if (score >= 70) return 'bg-lime-500';
-  if (score >= 55) return 'bg-yellow-500';
-  if (score >= 40) return 'bg-orange-500';
-  return 'bg-red-500';
-}
-
-function DimensionScoreCard({
-  title,
-  dim,
-  footer,
-}: {
-  title: string;
-  dim: DimensionScore;
-  footer?: ReactNode;
-}) {
-  return (
-    <div className={cardShellClass}>
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
-        {title}
-      </p>
-      <p className="mt-2 text-3xl font-bold tabular-nums text-gray-950 dark:text-white">
-        {dim.score === null ? '—' : dim.score}
-      </p>
-      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
-        {dim.label}
-      </p>
-      <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-        {dim.comment}
-      </p>
-      {dim.score !== null ? (
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-          <div
-            className={`h-full rounded-full ${scoreColorClass(dim.score)}`}
-            style={{ width: `${dim.score}%` }}
-          />
-        </div>
-      ) : null}
-      {footer ? <div className="mt-3 border-t border-gray-100 pt-2 dark:border-gray-700">{footer}</div> : null}
-    </div>
-  );
-}
-
-type CoachFeedbackCardVariant = 'strength' | 'improvement' | 'suggestion';
-
-const coachFeedbackAccentClass: Record<CoachFeedbackCardVariant, string> = {
-  strength: 'border-t-2 border-emerald-500',
-  improvement: 'border-t-2 border-amber-500',
-  suggestion: 'border-t-2 border-blue-500',
-};
-
-function CoachFeedbackCard({
-  variant,
-  title,
-  body,
-}: {
-  variant: CoachFeedbackCardVariant;
-  title: string;
-  body: string;
-}) {
-  return (
-    <div
-      className={`${coachCardShellClass} min-h-[160px] ${coachFeedbackAccentClass[variant]}`}
-    >
-      <p className="mb-2 text-lg font-semibold text-foreground">
-        {title}
-      </p>
-      <p className="text-base leading-relaxed text-foreground">
-        {body}
-      </p>
-    </div>
-  );
-}
-
-/** Phase 1 pacing curve copy — verbatim label + helper for UI descriptor. */
-function pacingCurveDescriptor(shape: PacingAnalysis['shape']): {
-  label: string;
-  helper: string;
-} | null {
-  switch (shape) {
-    case 'insufficient':
-      return null;
-    case 'steady':
-      return {
-        label: 'Steady',
-        helper: 'Consistent pace throughout, easy to follow',
-      };
-    case 'accelerating':
-      return {
-        label: 'Accelerating',
-        helper: 'You built momentum, good energy',
-      };
-    case 'decelerating':
-      return {
-        label: 'Decelerating',
-        helper:
-          'You slowed toward the end, make sure your conclusion lands',
-      };
-    case 'strong-start':
-      return {
-        label: 'Front-loaded',
-        helper:
-          'You opened strongly then settled into a slower pace',
-      };
-    case 'strong-finish':
-      return {
-        label: 'Back-loaded',
-        helper: 'You warmed up as you went',
-      };
-    case 'wave':
-      return {
-        label: 'Variable',
-        helper: 'Rhythmic pace variation, natural emphasis',
-      };
-    case 'erratic':
-      return {
-        label: 'Erratic',
-        helper:
-          'Your pace varied unpredictably, work on smoother transitions',
-      };
-    default:
-      return null;
-  }
-}
 
 type AnswerFormProps = {
   sessionId: string;
@@ -634,106 +503,20 @@ export function AnswerForm({
             </div>
           ) : null}
 
-          {analytics ? (
-            <section className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 shadow-sm dark:border-gray-600 dark:bg-gray-900/80">
-              <h3 className="text-base font-semibold tracking-tight text-gray-950 dark:text-white">
-                Speech Analytics
-              </h3>
-
-              {(() => {
-                const wpmFinite = Number.isFinite(analytics.speakingRateWpm);
-                const wpmHeadline = wpmFinite
-                  ? `${Math.round(analytics.speakingRateWpm)} WPM`
-                  : '—';
-                const pa = analytics.consistency.pacingAnalysis;
-                const curve = pacingCurveDescriptor(pa.shape);
-                const paceOverTimeData =
-                  analytics.consistency.pacingWindows.map((p) => ({
-                    time: p.midTime,
-                    wpm: p.wpm,
-                  }));
-
-                const dynamismFooter =
-                  curve == null ? null : (
-                    <div className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-                      <p className="font-medium text-gray-800 dark:text-gray-200">
-                        Curve shape: {curve.label}
-                      </p>
-                      <p className="mt-0.5">{curve.helper}</p>
-                    </div>
-                  );
-
-                return (
-                  <>
-                    <div className="mt-4 flex flex-wrap items-baseline gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
-                        Speaking rate
-                      </span>
-                      <span className="text-lg font-bold tabular-nums text-gray-950 dark:text-white">
-                        {wpmHeadline}
-                      </span>
-                    </div>
-
-                    {coachScorecard ? (
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        <DimensionScoreCard
-                          title="Pace"
-                          dim={coachScorecard.pace}
-                        />
-                        <DimensionScoreCard
-                          title="Fluency"
-                          dim={coachScorecard.fluency}
-                        />
-                        <DimensionScoreCard
-                          title="Cleanliness"
-                          dim={coachScorecard.cleanliness}
-                        />
-                        <DimensionScoreCard
-                          title="Dynamism"
-                          dim={coachScorecard.dynamism}
-                          footer={dynamismFooter}
-                        />
-                      </div>
-                    ) : (
-                      <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                        Delivery scorecard was not returned for this
-                        transcription.
-                      </p>
-                    )}
-
-                    <div className="mt-6">
-                      <SpeakingPaceOverTimeChart data={paceOverTimeData} />
-                    </div>
-                  </>
-                );
-              })()}
-            </section>
-          ) : null}
+          <SpeechAnalyticsSection
+            analytics={analytics}
+            scorecard={coachScorecard}
+          />
 
           <EngagementSection metrics={capturedEngagement} />
 
-          <section className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 shadow-sm dark:border-gray-600 dark:bg-gray-900/80">
-            <h3 className="text-base font-semibold tracking-tight text-gray-950 dark:text-white">
-              Coach Feedback
-            </h3>
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <CoachFeedbackCard
-                variant="strength"
-                title="Strength"
-                body={feedback.strength}
-              />
-              <CoachFeedbackCard
-                variant="improvement"
-                title="Improvement"
-                body={feedback.improvement}
-              />
-              <CoachFeedbackCard
-                variant="suggestion"
-                title="Suggestion"
-                body={feedback.suggestion}
-              />
-            </div>
-          </section>
+          <CoachFeedbackSection
+            feedbackRaw={JSON.stringify({
+              strength: feedback.strength,
+              improvement: feedback.improvement,
+              suggestion: feedback.suggestion,
+            })}
+          />
         </div>
       ) : null}
 
