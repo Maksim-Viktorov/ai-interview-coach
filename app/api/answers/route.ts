@@ -82,10 +82,7 @@ function isValidScorecard(s: unknown): s is DimensionScorecard {
   );
 }
 
-function fillerCountFromAnalytics(
-  analytics: DeepgramAnalytics | null | undefined,
-): number {
-  if (!analytics) return 0;
+function fillerCountFromAnalytics(analytics: DeepgramAnalytics): number {
   const ext = analytics as DeepgramAnalytics & { fillerCount?: number };
   if (typeof ext.fillerCount === 'number' && Number.isFinite(ext.fillerCount)) {
     return ext.fillerCount;
@@ -102,11 +99,11 @@ function buildMetricAwarePrompt(
   question: string,
   answer: string,
   scorecard: DimensionScorecard,
-  analytics: DeepgramAnalytics | null | undefined,
+  analytics: DeepgramAnalytics,
 ): string {
   const fillerCount = fillerCountFromAnalytics(analytics);
   const fillerDensity =
-    analytics?.fillerDensityPer100Words != null
+    analytics.fillerDensityPer100Words != null
       ? analytics.fillerDensityPer100Words.toFixed(1)
       : '0';
 
@@ -125,10 +122,10 @@ DELIVERY METRICS:
 - Fluency: ${scorecard.fluency.score ?? 'N/A'}/100 (${scorecard.fluency.label})
 - Cleanliness: ${scorecard.cleanliness.score}/100 (${scorecard.cleanliness.label})
 - Dynamism: ${scorecard.dynamism.score ?? 'N/A'}/100 (${scorecard.dynamism.label})
-- Pacing shape: ${analytics?.consistency?.pacingAnalysis?.shape ?? 'unknown'}
+- Pacing shape: ${analytics.consistency?.pacingAnalysis?.shape ?? 'unknown'}
 - Filler words: ${fillerCount} total (${fillerDensity} per 100 words)
-- Long pauses: ${analytics?.longPauseCount ?? 0}
-- Answer duration: ${analytics?.activeAnswerDurationSeconds != null ? analytics.activeAnswerDurationSeconds.toFixed(0) : 'unknown'} seconds
+- Long pauses: ${analytics.longPauseCount ?? 0}
+- Answer duration: ${analytics.activeAnswerDurationSeconds != null ? analytics.activeAnswerDurationSeconds.toFixed(0) : 'unknown'} seconds
 
 Return JSON in this exact format:
 {
@@ -143,25 +140,6 @@ Guidelines for each field:
 - suggestion: A specific actionable tactic to try next time
 
 Each field: 30 to 60 words. Be specific. Reference the actual content of their answer, not generic interview advice. Do not restate the metric numbers — interpret them.`;
-}
-
-function buildContentOnlyPrompt(question: string, answer: string): string {
-  return `You are an experienced behavioral interview coach. Analyze this written answer and provide feedback on content only.
-
-QUESTION:
-${question}
-
-ANSWER:
-${answer}
-
-Return JSON in this exact format:
-{
-  "strength": string,
-  "improvement": string,
-  "suggestion": string
-}
-
-Each field: 30 to 60 words. Be specific and reference the actual content. Do not give generic interview advice.`;
 }
 
 export async function POST(request: Request) {
@@ -191,6 +169,28 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!questionId) {
+    return NextResponse.json(
+      { error: 'questionId is required' },
+      { status: 400 },
+    );
+  }
+
+  if (
+    analytics == null ||
+    !isValidDeepgramAnalytics(analytics) ||
+    scorecard == null ||
+    !isValidScorecard(scorecard)
+  ) {
+    return NextResponse.json(
+      { error: 'Audio recording required' },
+      { status: 400 },
+    );
+  }
+
+  const resolvedScorecard = scorecard;
+  const resolvedAnalytics = analytics;
+
   let resolvedGaze: GazeMetricsPayload | null = null;
   if (gazeMetrics !== undefined && gazeMetrics !== null) {
     if (isValidGazeMetrics(gazeMetrics)) {
@@ -202,36 +202,12 @@ export async function POST(request: Request) {
     }
   }
 
-  let resolvedScorecard: DimensionScorecard | null = null;
-  if (scorecard !== undefined && scorecard !== null) {
-    if (isValidScorecard(scorecard)) {
-      resolvedScorecard = scorecard;
-    } else {
-      console.warn(
-        '[answers] malformed scorecard in request body, using content-only prompt',
-      );
-    }
-  }
-
-  let resolvedAnalytics: DeepgramAnalytics | null = null;
-  if (analytics !== undefined && analytics !== null) {
-    if (isValidDeepgramAnalytics(analytics)) {
-      resolvedAnalytics = analytics;
-    } else {
-      console.warn(
-        '[answers] malformed analytics in request body — storing null',
-      );
-    }
-  }
-
-  const prompt = resolvedScorecard
-    ? buildMetricAwarePrompt(
-        question,
-        answer,
-        resolvedScorecard,
-        resolvedAnalytics,
-      )
-    : buildContentOnlyPrompt(question, answer);
+  const prompt = buildMetricAwarePrompt(
+    question,
+    answer,
+    resolvedScorecard,
+    resolvedAnalytics,
+  );
 
   let parsed: ParsedFeedback;
 
@@ -254,12 +230,12 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from('interview_answers')
-    .insert([
+    .upsert(
       {
         session_id: sessionId,
         user_id: user.id,
         question,
-        question_id: questionId ?? null,
+        question_id: questionId,
         answer,
         feedback,
         speech_metrics: speechMetrics ?? null,
@@ -267,7 +243,8 @@ export async function POST(request: Request) {
         delivery_analytics: resolvedAnalytics,
         gaze_metrics: resolvedGaze,
       },
-    ])
+      { onConflict: 'session_id,question_id' },
+    )
     .select()
     .single();
 

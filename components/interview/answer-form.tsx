@@ -356,6 +356,11 @@ export function AnswerForm({
   const handleSubmit = async () => {
     setFeedback(null);
 
+    if (!analytics || !coachScorecard) {
+      setErrorMessage('Record your answer to submit');
+      return;
+    }
+
     if (!answer.trim()) {
       setErrorMessage('Please enter an answer.');
       return;
@@ -374,8 +379,8 @@ export function AnswerForm({
           questionId,
           answer,
           speechMetrics: metrics,
-          scorecard: coachScorecard ?? undefined,
-          analytics: analytics ?? undefined,
+          scorecard: coachScorecard,
+          analytics,
           gazeMetrics: capturedEngagement ?? undefined,
         }),
       });
@@ -473,7 +478,7 @@ export function AnswerForm({
         <div className="space-y-2">
           <textarea
             className="min-h-32 w-full rounded border p-3"
-            placeholder="Type your answer here..."
+            placeholder="Your transcribed answer will appear here. You can edit it to fix mistranscriptions before submitting."
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             aria-label="Answer"
@@ -520,14 +525,27 @@ export function AnswerForm({
         </div>
       ) : null}
 
-      <button
-        type="button"
-        className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-        disabled={submitting}
-        onClick={() => void handleSubmit()}
-      >
-        {submitting ? 'Submitting...' : 'Submit Answer'}
-      </button>
+      <div className="space-y-2">
+        {analytics == null &&
+        !isRecording &&
+        !transcribing &&
+        !submitting &&
+        feedback == null ? (
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Record your answer to submit
+          </p>
+        ) : null}
+        <button
+          type="button"
+          className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={
+            submitting || isRecording || transcribing || analytics == null
+          }
+          onClick={() => void handleSubmit()}
+        >
+          {submitting ? 'Submitting...' : 'Submit Answer'}
+        </button>
+      </div>
     </section>
   );
 }
