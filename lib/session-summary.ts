@@ -16,7 +16,7 @@ export type AnswerDbRow = {
 
 export type QuestionRow = { id: string; text: string };
 
-function isValidScorecard(s: unknown): s is DimensionScorecard {
+export function isValidScorecard(s: unknown): s is DimensionScorecard {
   if (!s || typeof s !== 'object') return false;
   const sc = s as Record<string, unknown>;
   return (
@@ -31,7 +31,7 @@ function isValidScorecard(s: unknown): s is DimensionScorecard {
   );
 }
 
-function isValidGazeMetrics(v: unknown): v is GazeMetricsSnapshot {
+export function isValidGazeMetrics(v: unknown): v is GazeMetricsSnapshot {
   if (v == null || typeof v !== 'object') return false;
   const o = v as Record<string, unknown>;
   return (

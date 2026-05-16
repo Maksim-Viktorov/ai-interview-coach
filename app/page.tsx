@@ -64,13 +64,21 @@ export default function Home() {
 
       <h2 className="text-xl font-semibold mb-2">Interview Sessions</h2>
 
-      <button
-        type="button"
-        className="mb-4 rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-        onClick={() => void createSession()}
-      >
-        Start New Interview
-      </button>
+      <div className="mb-4 flex flex-wrap gap-3">
+        <button
+          type="button"
+          className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => void createSession()}
+        >
+          Start New Interview
+        </button>
+        <Link
+          href="/stats"
+          className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200"
+        >
+          View Stats
+        </Link>
+      </div>
 
       {sessions.length === 0 ? (
         <p>No sessions found.</p>

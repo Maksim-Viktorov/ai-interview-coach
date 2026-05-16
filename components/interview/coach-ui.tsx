@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import type { PacingAnalysis } from '@/lib/deepgram-analytics';
 import type { DimensionScore } from '@/lib/deepgram-coach';
 
-const cardShellClass =
+export const CARD_SHELL_CLASS =
   'flex flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-600 dark:bg-gray-950/40';
 
 const coachCardShellClass =
@@ -28,7 +28,7 @@ export function DimensionScoreCard({
   footer?: ReactNode;
 }) {
   return (
-    <div className={cardShellClass}>
+    <div className={CARD_SHELL_CLASS}>
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
         {title}
       </p>
