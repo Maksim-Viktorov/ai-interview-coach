@@ -4,7 +4,7 @@ A full-stack AI-powered interview coach that lets users practice behavioral inte
 
 ## Status
 
-Active development. The Deepgram-backed speech analytics pipeline, four-dimension scorecard, and browser-side gaze/engagement path are wired into the main interview answer flow. **`/gaze-prototype`** remains available as an isolated MediaPipe sandbox for debugging thresholds and overlays.
+Active development. The Deepgram-backed speech analytics pipeline, four-dimension scorecard, and browser-side gaze/engagement path are wired into the main interview answer flow.
 
 ## Features
 
@@ -18,7 +18,7 @@ Active development. The Deepgram-backed speech analytics pipeline, four-dimensio
 - **Speaking pace chart** — Sliding-window WPM over time with an ideal-range reference band and x-axis ticks at even seconds (shown with the scorecard after submit when analytics exist).
 - **AI-generated coach feedback** — After submit the server evaluates the answer with structured output (three cards: **Strength**, **Improvement**, **Suggestion**). The prompt cross-references **response content with delivery patterns**, taking both the transcript and the **four-dimension scorecard** as structured inputs when transcription analytics are available; typed-only submits use a narrower content-only prompt.
 - **Interview session flow** — Multi-step interview experience with persistent sessions and a guided completion flow.
-- **Engagement metrics (integrated)** — **`hooks/useGazeTracking.ts`** runs **MediaPipe Face Landmarker** (WASM via `@mediapipe/tasks-vision`) during recording while **`components/interview/camera-preview.tsx`** shows a mirrored self-view. Head pose plus dual-axis iris cues are compared against a **per-session baseline**, with blink masking (Eye Aspect Ratio) and asymmetric vertical thresholds. Aggregates render in **`components/interview/engagement-section.tsx`** after submit alongside Speech Analytics whenever camera data existed for that recording. Pure math helpers live in **`lib/gaze-detection.ts`**. A standalone experimental UI remains at **`/gaze-prototype`**.
+- **Engagement metrics (integrated)** — **`hooks/useGazeTracking.ts`** runs **MediaPipe Face Landmarker** (WASM via `@mediapipe/tasks-vision`) during recording while **`components/interview/camera-preview.tsx`** shows a mirrored self-view. Head pose plus dual-axis iris cues are compared against a **per-session baseline**, with blink masking (Eye Aspect Ratio) and asymmetric vertical thresholds. Aggregates render in **`components/interview/engagement-section.tsx`** after submit alongside Speech Analytics whenever camera data existed for that recording. Pure math helpers live in **`lib/gaze-detection.ts`**.
 - **Calibration tooling** — **`scripts/calibration/`**: batch reference recordings through the production analytics pipeline (`npm run calibrate`), then summarize per-metric distributions and Cohen's d separation between labeled groups (`npm run calibrate:analyse`).
 
 ## Tech Stack
@@ -75,7 +75,7 @@ You will need the matching **Supabase schema** (`interview_sessions`, `interview
 
 ## Project Structure
 
-- **`app/`** — App Router pages and API route handlers (`/api/sessions`, `/api/answers`, `/api/transcribe-deepgram`, interview and home routes; gaze prototype at `/gaze-prototype`).
+- **`app/`** — App Router pages and API route handlers (`/api/sessions`, `/api/answers`, `/api/transcribe-deepgram`, interview and home routes).
 - **`components/`** — UI including the interview flow and answer form. Interview-specific pieces include **`components/interview/camera-preview.tsx`**, **`components/interview/engagement-section.tsx`**, pace chart, and highlighted transcript.
 - **`hooks/`** — **`hooks/useGazeTracking.ts`** — MediaPipe Face Landmarker lifecycle, baseline sampling, and metric aggregation for the answer form.
 - **`lib/`** — Supabase helpers, Deepgram integration, delivery analytics and dimension scoring (`DeepgramAnalytics`, scorecard types), **`lib/gaze-detection.ts`** (pure helpers: head pose from transform matrix, iris ratios, EAR), **`lib/filler-detection.ts`** (single filler vocabulary shared by cleanliness scoring + transcript spans), calibration reuse code.
