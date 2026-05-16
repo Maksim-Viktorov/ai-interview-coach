@@ -1,106 +1,82 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { AuthHeader } from '@/components/auth/header';
-import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
-
-type InterviewSession = {
-  id: string;
-  created_at: string;
-  interview_type: string;
-  status: string;
-};
+import {
+  GradientButton,
+  gradientButtonClassName,
+} from '@/components/ui/gradient-button';
 
 export default function Home() {
-  const [sessions, setSessions] = useState<InterviewSession[]>([]);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchSessions = async () => {
-      const supabase = createSupabaseBrowserClient();
-      const { data, error } = await supabase
-        .from('interview_sessions')
-        .select('*')
-        .order('created_at', { ascending: false });
+  const handleStartInterview = async () => {
+    setCreateError(null);
+    setIsCreating(true);
 
-      if (error) {
-        console.error('Error fetching sessions:', error);
-      } else {
-        setSessions(data ?? []);
+    try {
+      const res = await fetch('/api/sessions', { method: 'POST' });
+      const result = (await res.json()) as {
+        session?: { id: string };
+        error?: string;
+      };
+
+      if (!res.ok) {
+        setCreateError(result.error ?? 'Could not start interview');
+        return;
       }
 
-      setLoading(false);
-    };
+      const sessionId = result.session?.id;
+      if (!sessionId) {
+        setCreateError('Could not start interview');
+        return;
+      }
 
-    fetchSessions();
-  }, []);
-
-  const createSession = async () => {
-    const res = await fetch('/api/sessions', { method: 'POST' });
-    const result = (await res.json()) as {
-      session?: InterviewSession;
-      error?: string;
-    };
-
-    if (!res.ok) {
-      console.error('Error creating session:', result.error);
-      return;
-    }
-
-    const session = result.session;
-    if (session) {
-      setSessions((prev) => [session, ...prev]);
+      router.push(`/interview/${sessionId}`);
+    } catch {
+      setCreateError('Could not start interview');
+    } finally {
+      setIsCreating(false);
     }
   };
-
-  if (loading) return <main className="p-8 space-y-6">Loading...</main>;
 
   return (
     <>
       <AuthHeader />
-      <main className="p-8 space-y-6">
-      <h1 className="text-2xl font-bold mb-4">AI Interview Coach</h1>
+      <main className="flex flex-1 flex-col">
+        <div className="flex flex-1 items-center justify-center px-4">
+          <div className="flex max-w-2xl flex-col items-center">
+            <h1 className="text-center font-display text-5xl font-bold text-brand md:text-6xl">
+              Welcome to AI Interview Coach
+            </h1>
+            <p className="mt-4 max-w-xl text-center font-body text-lg text-text-secondary">
+              Practice behavioral interviews with delivery analytics
+            </p>
 
-      <h2 className="text-xl font-semibold mb-2">Interview Sessions</h2>
-
-      <div className="mb-4 flex flex-wrap gap-3">
-        <button
-          type="button"
-          className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={() => void createSession()}
-        >
-          Start New Interview
-        </button>
-        <Link
-          href="/stats"
-          className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200"
-        >
-          View Stats
-        </Link>
-      </div>
-
-      {sessions.length === 0 ? (
-        <p>No sessions found.</p>
-      ) : (
-        <ul className="space-y-2">
-          {sessions.map((session) => (
-            <li key={session.id}>
-              <Link
-                href={`/interview/${session.id}`}
-                className="block border rounded p-3 hover:bg-gray-50 cursor-pointer"
+            <div className="mt-10 flex flex-wrap justify-center gap-4">
+              <GradientButton
+                onClick={() => void handleStartInterview()}
+                disabled={isCreating}
               >
-                <p>Type: {session.interview_type}</p>
-                <p>Status: {session.status}</p>
-                <p className="text-sm text-gray-500">
-                  Created: {new Date(session.created_at).toLocaleString()}
-                </p>
+                {isCreating ? 'Creating session…' : 'Start Interview'}
+              </GradientButton>
+              <Link href="/stats" className={gradientButtonClassName}>
+                View Stats
               </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+            </div>
+
+            {createError ? (
+              <p className="mt-4 text-center text-sm text-score-bad" role="alert">
+                {createError}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </main>
     </>
   );
 }
