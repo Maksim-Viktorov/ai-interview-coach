@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
+import { requireAuthUser } from '@/lib/auth-api';
 import { countFillersInText } from '@/lib/filler-detection';
 import { openai } from '@/lib/openai';
 
 export async function POST(request: Request) {
+  const auth = await requireAuthUser();
+  if ('error' in auth) {
+    return auth.error;
+  }
+
   const formData = await request.formData();
   const file = formData.get('file') as File | null;
 

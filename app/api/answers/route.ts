@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { DeepgramAnalytics } from '@/lib/deepgram-analytics';
 import type { DimensionScorecard } from '@/lib/dimension-scoring';
 import { openai } from '@/lib/openai';
-import { supabaseServer } from '@/lib/supabase-server';
+import { requireAuthUser } from '@/lib/auth-api';
 
 type SpeechMetricsPayload = {
   wordCount: number;
@@ -164,6 +164,12 @@ Each field: 30 to 60 words. Be specific and reference the actual content. Do not
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuthUser();
+  if ('error' in auth) {
+    return auth.error;
+  }
+  const { user, supabase } = auth;
+
   const body = (await request.json()) as AnswersRequestBody;
 
   const {
@@ -229,11 +235,12 @@ export async function POST(request: Request) {
 
   const feedback = JSON.stringify(parsed);
 
-  const { data, error } = await supabaseServer
+  const { data, error } = await supabase
     .from('interview_answers')
     .insert([
       {
         session_id: sessionId,
+        user_id: user.id,
         question,
         question_id: questionId ?? null,
         answer,

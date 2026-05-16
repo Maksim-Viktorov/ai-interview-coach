@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAuthUser } from '@/lib/auth-api';
 import { analyzeDeepgramSpeech } from '@/lib/deepgram-analytics';
 import {
   normalizeDeepgramResponse,
@@ -7,6 +8,11 @@ import {
 import { generateCoachFeedback } from '@/lib/deepgram-coach';
 
 export async function POST(request: Request) {
+  const auth = await requireAuthUser();
+  if ('error' in auth) {
+    return auth.error;
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;

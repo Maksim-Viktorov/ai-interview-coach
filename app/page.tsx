@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { AuthHeader } from '@/components/auth/header';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 
 type InterviewSession = {
   id: string;
@@ -17,6 +18,7 @@ export default function Home() {
 
   useEffect(() => {
     const fetchSessions = async () => {
+      const supabase = createSupabaseBrowserClient();
       const { data, error } = await supabase
         .from('interview_sessions')
         .select('*')
@@ -55,7 +57,9 @@ export default function Home() {
   if (loading) return <main className="p-8 space-y-6">Loading...</main>;
 
   return (
-    <main className="p-8 space-y-6">
+    <>
+      <AuthHeader />
+      <main className="p-8 space-y-6">
       <h1 className="text-2xl font-bold mb-4">AI Interview Coach</h1>
 
       <h2 className="text-xl font-semibold mb-2">Interview Sessions</h2>
@@ -89,5 +93,6 @@ export default function Home() {
         </ul>
       )}
     </main>
+    </>
   );
 }

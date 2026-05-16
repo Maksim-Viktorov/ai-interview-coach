@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { InterviewFlow, type RecentAnswer } from '@/components/interview/interview-flow';
-import { supabaseServer } from '@/lib/supabase-server';
+import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { AuthHeader } from '@/components/auth/header';
 
 type QuestionRow = {
   id: string;
@@ -22,7 +23,9 @@ export default async function Page({
 }) {
   const { id } = await params;
 
-  const { data: session, error } = await supabaseServer
+  const supabase = await createSupabaseServerClient();
+
+  const { data: session, error } = await supabase
     .from('interview_sessions')
     .select('*')
     .eq('id', id)
@@ -58,7 +61,7 @@ export default async function Page({
     );
   }
 
-  const { data: questionRows, error: qErr } = await supabaseServer
+  const { data: questionRows, error: qErr } = await supabase
     .from('questions')
     .select('id, text')
     .in('id', rawIds);
@@ -99,7 +102,7 @@ export default async function Page({
   const questionTexts = orderedQuestions.map((q) => q.text);
   const questionIdsList = orderedQuestions.map((q) => q.id);
 
-  const { data: answersData } = await supabaseServer
+  const { data: answersData } = await supabase
     .from('interview_answers')
     .select('id, question, answer, feedback, speech_metrics')
     .eq('session_id', id)
@@ -127,7 +130,9 @@ export default async function Page({
   });
 
   return (
-    <main className="p-8 space-y-6">
+    <>
+      <AuthHeader />
+      <main className="p-8 space-y-6">
       <h1 className="text-2xl font-bold mb-4">Interview Session</h1>
 
       <ul className="mb-6 space-y-2">
@@ -159,5 +164,6 @@ export default async function Page({
         Back to sessions
       </Link>
     </main>
+    </>
   );
 }

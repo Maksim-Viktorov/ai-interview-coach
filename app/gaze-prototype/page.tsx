@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { AuthHeader } from '@/components/auth/header';
 import { useGazeTracking } from '@/hooks/useGazeTracking';
 
 export default function GazePrototypePage() {
@@ -91,7 +92,9 @@ export default function GazePrototypePage() {
       : '—';
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-6 text-gray-900 dark:text-gray-100">
+    <>
+      <AuthHeader />
+      <main className="mx-auto max-w-5xl space-y-6 p-6 text-gray-900 dark:text-gray-100">
       <h1 className="text-2xl font-semibold tracking-tight">
         Gaze Detection Prototype
       </h1>
@@ -272,5 +275,6 @@ export default function GazePrototypePage() {
         </p>
       </div>
     </main>
+    </>
   );
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase-server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuthUser } from '@/lib/auth-api';
 
 const INSUFFICIENT =
   'Question bank insufficient — needs at least 3 questions.';
@@ -9,8 +10,10 @@ const INSUFFICIENT =
  * categories), then fill from the full bank if needed. Returns null if the bank
  * cannot supply 3 distinct questions.
  */
-async function pickThreeQuestionIds(): Promise<string[] | null> {
-  const { count, error: countError } = await supabaseServer
+async function pickThreeQuestionIds(
+  supabase: SupabaseClient,
+): Promise<string[] | null> {
+  const { count, error: countError } = await supabase
     .from('questions')
     .select('*', { count: 'exact', head: true });
 
@@ -22,7 +25,7 @@ async function pickThreeQuestionIds(): Promise<string[] | null> {
     return null;
   }
 
-  const { data: categoryRows, error: catError } = await supabaseServer
+  const { data: categoryRows, error: catError } = await supabase
     .from('questions')
     .select('category');
 
@@ -47,7 +50,7 @@ async function pickThreeQuestionIds(): Promise<string[] | null> {
 
   for (const category of chosenCategories) {
     if (questionIds.length >= 3) break;
-    const { data } = await supabaseServer
+    const { data } = await supabase
       .from('questions')
       .select('id')
       .eq('category', category)
@@ -65,10 +68,7 @@ async function pickThreeQuestionIds(): Promise<string[] | null> {
     console.warn(
       '[sessions] fewer than 3 questions from category variety; filling from full bank',
     );
-    const { data: pool } = await supabaseServer
-      .from('questions')
-      .select('id')
-      .limit(100);
+    const { data: pool } = await supabase.from('questions').select('id').limit(100);
 
     const poolIds = [
       ...new Set((pool ?? []).map((r: { id: string }) => r.id)),
@@ -90,17 +90,24 @@ async function pickThreeQuestionIds(): Promise<string[] | null> {
 }
 
 export async function POST() {
-  const questionIds = await pickThreeQuestionIds();
+  const auth = await requireAuthUser();
+  if ('error' in auth) {
+    return auth.error;
+  }
+  const { user, supabase } = auth;
+
+  const questionIds = await pickThreeQuestionIds(supabase);
   if (!questionIds) {
     return NextResponse.json({ error: INSUFFICIENT }, { status: 500 });
   }
 
-  const { data, error } = await supabaseServer
+  const { data, error } = await supabase
     .from('interview_sessions')
     .insert([
       {
         interview_type: 'behavioral',
         question_ids: questionIds,
+        user_id: user.id,
       },
     ])
     .select()
