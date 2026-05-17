@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { AuthHeader } from '@/components/auth/header';
 import { SessionSummary } from '@/components/interview/session-summary';
-import { gradientButtonClassName } from '@/components/ui/gradient-button';
+import { gradientButtonClassName } from '@/lib/gradient-button-styles';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import {
   buildSessionSummaryPairs,

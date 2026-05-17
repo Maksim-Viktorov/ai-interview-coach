@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { InterviewFlow } from '@/components/interview/interview-flow';
 import { AuthHeader } from '@/components/auth/header';
-import { gradientButtonClassName } from '@/components/ui/gradient-button';
+import { gradientButtonClassName } from '@/lib/gradient-button-styles';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 type QuestionRow = {

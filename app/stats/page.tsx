@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { AuthHeader } from '@/components/auth/header';
 import { SessionList } from '@/components/stats/session-list';
 import { StatsOverview } from '@/components/stats/stats-overview';
-import { gradientButtonClassName } from '@/components/ui/gradient-button';
+import { gradientButtonClassName } from '@/lib/gradient-button-styles';
 import {
   computeAggregates,
   deriveSessionRows,
