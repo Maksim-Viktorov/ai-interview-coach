@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { InterviewFlow } from '@/components/interview/interview-flow';
-import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { AuthHeader } from '@/components/auth/header';
+import { gradientButtonClassName } from '@/components/ui/gradient-button';
+import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 type QuestionRow = {
   id: string;
@@ -15,6 +16,31 @@ type SessionRow = {
   status: string;
   question_ids?: string[] | null;
 };
+
+function SessionErrorPage({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <>
+      <AuthHeader />
+      <main className="flex flex-1 flex-col items-center px-6 pt-12 pb-20">
+        <div className="w-full max-w-2xl text-center">
+          <h1 className="mb-4 font-display text-3xl font-bold text-text-primary">
+            {title}
+          </h1>
+          <p className="mb-8 font-body text-text-secondary">{description}</p>
+          <Link href="/" className={gradientButtonClassName('large')}>
+            Back to Home
+          </Link>
+        </div>
+      </main>
+    </>
+  );
+}
 
 export default async function Page({
   params,
@@ -33,15 +59,10 @@ export default async function Page({
 
   if (error || !session) {
     return (
-      <main className="p-8 space-y-6">
-        <p className="mb-4">Session not found</p>
-        <Link
-          href="/"
-          className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
-        >
-          Back to sessions
-        </Link>
-      </main>
+      <SessionErrorPage
+        title="Session not found"
+        description="We couldn't find this interview session. It may have been deleted or you may not have access."
+      />
     );
   }
 
@@ -49,15 +70,10 @@ export default async function Page({
   const rawIds = s.question_ids;
   if (!Array.isArray(rawIds) || rawIds.length !== 3) {
     return (
-      <main className="p-8 space-y-6">
-        <p className="mb-4">This session is missing question data</p>
-        <Link
-          href="/"
-          className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
-        >
-          Back to home
-        </Link>
-      </main>
+      <SessionErrorPage
+        title="Missing question data"
+        description="This session doesn't have valid questions assigned."
+      />
     );
   }
 
@@ -68,15 +84,10 @@ export default async function Page({
 
   if (qErr || !questionRows) {
     return (
-      <main className="p-8 space-y-6">
-        <p className="mb-4">This session is missing question data</p>
-        <Link
-          href="/"
-          className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
-        >
-          Back to home
-        </Link>
-      </main>
+      <SessionErrorPage
+        title="Missing question data"
+        description="This session doesn't have valid questions assigned."
+      />
     );
   }
 
@@ -87,15 +98,10 @@ export default async function Page({
 
   if (orderedQuestions.length !== 3) {
     return (
-      <main className="p-8 space-y-6">
-        <p className="mb-4">This session is missing question data</p>
-        <Link
-          href="/"
-          className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
-        >
-          Back to home
-        </Link>
-      </main>
+      <SessionErrorPage
+        title="Missing question data"
+        description="This session doesn't have valid questions assigned."
+      />
     );
   }
 
@@ -105,37 +111,15 @@ export default async function Page({
   return (
     <>
       <AuthHeader />
-      <main className="p-8 space-y-6">
-      <h1 className="text-2xl font-bold mb-4">Interview Session</h1>
-
-      <ul className="mb-6 space-y-2">
-        <li>
-          <span className="font-medium">ID:</span> {session.id}
-        </li>
-        <li>
-          <span className="font-medium">Type:</span> {session.interview_type}
-        </li>
-        <li>
-          <span className="font-medium">Status:</span> {session.status}
-        </li>
-        <li>
-          <span className="font-medium">Created:</span>{' '}
-          {new Date(session.created_at).toLocaleString()}
-        </li>
-      </ul>
-      <InterviewFlow
-        sessionId={session.id}
-        questions={questionTexts}
-        questionIds={questionIdsList}
-      />
-
-      <Link
-        href="/"
-        className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
-      >
-        Back to sessions
-      </Link>
-    </main>
+      <main className="flex flex-1 flex-col items-center px-6 pt-12 pb-20">
+        <div className="w-full max-w-3xl">
+          <InterviewFlow
+            sessionId={session.id}
+            questions={questionTexts}
+            questionIds={questionIdsList}
+          />
+        </div>
+      </main>
     </>
   );
 }

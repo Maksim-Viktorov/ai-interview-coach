@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { AnswerForm } from '@/components/interview/answer-form';
+import { GradientButton } from '@/components/ui/gradient-button';
 
 type InterviewFlowProps = {
   sessionId: string;
@@ -22,7 +23,7 @@ export function InterviewFlow({
 
   if (questions.length === 0 || questions.length !== questionIds.length) {
     return (
-      <p className="text-sm text-red-600" role="alert">
+      <p className="font-body text-sm text-score-bad" role="alert">
         Invalid question configuration for this session.
       </p>
     );
@@ -44,10 +45,31 @@ export function InterviewFlow({
   };
 
   return (
-    <div className="space-y-6">
-      <p className="text-sm text-gray-600 dark:text-gray-400">
-        Question {displayNumber} of {total}
-      </p>
+    <div>
+      <div className="mb-12 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {questions.map((_, index) => (
+            <span
+              key={index}
+              className={`
+                h-2.5 w-2.5 rounded-full transition-colors duration-300
+                ${index === currentQuestionIndex ? 'bg-brand' : ''}
+                ${index < currentQuestionIndex ? 'bg-brand opacity-40' : ''}
+                ${index > currentQuestionIndex ? 'border-2 border-border bg-transparent' : ''}
+              `}
+            />
+          ))}
+        </div>
+        <p className="font-body text-sm text-text-secondary">
+          Question {displayNumber} of {total}
+        </p>
+      </div>
+
+      <div className="mb-10">
+        <h1 className="font-display text-3xl font-bold leading-tight text-text-primary md:text-4xl">
+          {currentQuestion}
+        </h1>
+      </div>
 
       <AnswerForm
         key={currentQuestionIndex}
@@ -58,14 +80,15 @@ export function InterviewFlow({
         onSubmitted={() => setSubmittedCurrentQuestion(true)}
       />
 
-      <button
-        type="button"
-        className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-200"
-        disabled={!submittedCurrentQuestion}
-        onClick={handleNext}
-      >
-        {isLastQuestion ? 'Finish interview' : 'Next Question'}
-      </button>
+      <div className="mt-12 flex justify-center">
+        <GradientButton
+          size="large"
+          disabled={!submittedCurrentQuestion}
+          onClick={handleNext}
+        >
+          {isLastQuestion ? 'Finish Interview' : 'Next Question'}
+        </GradientButton>
+      </div>
     </div>
   );
 }
