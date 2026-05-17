@@ -26,7 +26,7 @@ function highlightFillerWords(transcript: string): ReactNode {
     nodes.push(
       <span
         key={`f-${key++}`}
-        className="bg-yellow-200 text-black px-1 rounded"
+        className="rounded bg-score-mid/20 px-1 py-0.5 text-text-primary"
       >
         {range.text}
       </span>,
