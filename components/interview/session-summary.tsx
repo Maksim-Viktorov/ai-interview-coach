@@ -5,6 +5,7 @@ import { HighlightedTranscript } from '@/components/interview/highlighted-transc
 import { EngagementSection } from '@/components/interview/engagement-section';
 import { CoachFeedbackSection } from '@/components/interview/coach-ui';
 import { SpeechAnalyticsSection } from '@/components/interview/speech-analytics-section';
+import { SpeakingPaceOverTimeSection } from '@/components/interview/speaking-pace-over-time-section';
 import type { DeepgramAnalytics } from '@/lib/deepgram-analytics';
 import type { DimensionScorecard } from '@/lib/dimension-scoring';
 import type { GazeMetricsSnapshot } from '@/hooks/useGazeTracking';
@@ -62,7 +63,7 @@ export function SessionSummary({ sessionCreatedAt, pairs }: SessionSummaryProps)
             </div>
 
             <div
-              className="min-h-32 w-full rounded border p-3 text-left leading-relaxed"
+              className="rounded-2xl border border-border bg-surface-soft p-6 font-body text-base leading-relaxed text-text-primary"
               aria-label="Answer transcript with filler highlights"
             >
               <HighlightedTranscript text={pair.answer.answer} />
@@ -73,9 +74,16 @@ export function SessionSummary({ sessionCreatedAt, pairs }: SessionSummaryProps)
               scorecard={pair.answer.delivery_scorecard}
             />
 
+            <SpeakingPaceOverTimeSection
+              analytics={pair.answer.delivery_analytics}
+            />
+
             <EngagementSection metrics={pair.answer.gaze_metrics} />
 
-            <CoachFeedbackSection feedbackRaw={pair.answer.feedback} />
+            <CoachFeedbackSection
+              feedbackRaw={pair.answer.feedback}
+              answerId={pair.answer.id}
+            />
           </article>
         ))}
       </div>

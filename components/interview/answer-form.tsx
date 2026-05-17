@@ -6,6 +6,7 @@ import { CameraPreview } from '@/components/interview/camera-preview';
 import { EngagementSection } from '@/components/interview/engagement-section';
 import { CoachFeedbackSection } from '@/components/interview/coach-ui';
 import { SpeechAnalyticsSection } from '@/components/interview/speech-analytics-section';
+import { SpeakingPaceOverTimeSection } from '@/components/interview/speaking-pace-over-time-section';
 import { GradientButton } from '@/components/ui/gradient-button';
 import { OutlineButton } from '@/components/ui/outline-button';
 import {
@@ -24,12 +25,6 @@ type AnswerFormProps = {
   question: string;
   questionId: string;
   onSubmitted?: () => void;
-};
-
-type FeedbackState = {
-  strength: string;
-  improvement: string;
-  suggestion: string;
 };
 
 type TranscribeMetrics = {
@@ -92,7 +87,10 @@ export function AnswerForm({
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [feedbackRaw, setFeedbackRaw] = useState<string | null>(null);
+  const [submittedAnswerId, setSubmittedAnswerId] = useState<string | null>(
+    null,
+  );
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -135,7 +133,7 @@ export function AnswerForm({
   );
 
   const showTranscript =
-    analytics != null && feedback == null && !transcribing;
+    analytics != null && feedbackRaw == null && !transcribing;
 
   const canSubmit =
     !submitting &&
@@ -246,16 +244,17 @@ export function AnswerForm({
   }, []);
 
   useEffect(() => {
-    const hasFeedback = feedback !== null;
+    const hasFeedback = feedbackRaw !== null;
     if (hasFeedback && !hadFeedbackRef.current) {
       feedbackRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
     hadFeedbackRef.current = hasFeedback;
-  }, [feedback]);
+  }, [feedbackRaw]);
 
   const startRecording = async () => {
     try {
-      setFeedback(null);
+      setFeedbackRaw(null);
+      setSubmittedAnswerId(null);
       setAnswer('');
       setAnalytics(null);
       setCoachScorecard(null);
@@ -423,7 +422,8 @@ export function AnswerForm({
   };
 
   const handleSubmit = async () => {
-    setFeedback(null);
+    setFeedbackRaw(null);
+    setSubmittedAnswerId(null);
 
     if (!analytics || !coachScorecard) {
       setErrorMessage('Record your answer to submit');
@@ -456,11 +456,8 @@ export function AnswerForm({
 
       const result = (await res.json()) as {
         error?: string;
-        feedback?: {
-          strength: string;
-          improvement: string;
-          suggestion: string;
-        };
+        answerId?: string;
+        feedback?: string;
       };
 
       if (!res.ok) {
@@ -469,7 +466,12 @@ export function AnswerForm({
       }
 
       setErrorMessage(null);
-      setFeedback(result.feedback ?? null);
+      if (typeof result.feedback === 'string') {
+        setFeedbackRaw(result.feedback);
+      }
+      if (typeof result.answerId === 'string') {
+        setSubmittedAnswerId(result.answerId);
+      }
       onSubmitted?.();
     } finally {
       setSubmitting(false);
@@ -620,7 +622,7 @@ export function AnswerForm({
         </div>
       ) : null}
 
-      {feedback == null ? (
+      {feedbackRaw == null ? (
         <div className="pt-4">
           <GradientButton
             size="large"
@@ -640,15 +642,24 @@ export function AnswerForm({
 
       {errorMessage ? <ErrorAlert message={errorMessage} /> : null}
 
-      {feedback ? (
-        <div ref={feedbackRef} className="space-y-6" role="status">
+      {feedbackRaw ? (
+        <div ref={feedbackRef} className="mt-12 space-y-10" role="status">
+          <h2 className="font-display text-2xl font-bold text-text-primary">
+            Your Results
+          </h2>
+
           {analytics ? (
-            <div
-              className="min-h-32 w-full rounded border p-3 text-left leading-relaxed"
-              aria-label="Answer transcript with filler highlights"
-            >
-              <HighlightedTranscript text={answer} />
-            </div>
+            <section className="space-y-4">
+              <h3 className="font-display text-lg font-semibold text-text-primary">
+                Your Answer
+              </h3>
+              <div
+                className="rounded-2xl border border-border bg-surface-soft p-6 font-body text-base leading-relaxed text-text-primary"
+                aria-label="Answer transcript with filler highlights"
+              >
+                <HighlightedTranscript text={answer} />
+              </div>
+            </section>
           ) : null}
 
           <SpeechAnalyticsSection
@@ -656,14 +667,13 @@ export function AnswerForm({
             scorecard={coachScorecard}
           />
 
+          <SpeakingPaceOverTimeSection analytics={analytics} />
+
           <EngagementSection metrics={capturedEngagement} />
 
           <CoachFeedbackSection
-            feedbackRaw={JSON.stringify({
-              strength: feedback.strength,
-              improvement: feedback.improvement,
-              suggestion: feedback.suggestion,
-            })}
+            feedbackRaw={feedbackRaw}
+            answerId={submittedAnswerId ?? undefined}
           />
         </div>
       ) : null}
