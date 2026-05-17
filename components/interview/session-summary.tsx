@@ -6,6 +6,7 @@ import { EngagementSection } from '@/components/interview/engagement-section';
 import { CoachFeedbackSection } from '@/components/interview/coach-ui';
 import { SpeechAnalyticsSection } from '@/components/interview/speech-analytics-section';
 import { SpeakingPaceOverTimeSection } from '@/components/interview/speaking-pace-over-time-section';
+import { gradientButtonClassName } from '@/components/ui/gradient-button';
 import type { DeepgramAnalytics } from '@/lib/deepgram-analytics';
 import type { DimensionScorecard } from '@/lib/dimension-scoring';
 import type { GazeMetricsSnapshot } from '@/hooks/useGazeTracking';
@@ -40,34 +41,42 @@ function formatSessionDate(iso: string): string {
 
 export function SessionSummary({ sessionCreatedAt, pairs }: SessionSummaryProps) {
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
+    <div>
+      <div className="mb-12 text-center">
+        <h1 className="mb-3 font-display text-4xl font-bold text-text-primary md:text-5xl">
           Session Summary
         </h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+        <p className="font-body text-base text-text-secondary">
           Completed {formatSessionDate(sessionCreatedAt)}
         </p>
-      </header>
+      </div>
 
       <div className="space-y-12">
         {pairs.map((pair, index) => (
-          <article key={pair.answer.id} className="space-y-6">
+          <section
+            key={pair.answer.id}
+            className="space-y-8 border-b border-border pb-12 last:border-b-0 last:pb-0"
+          >
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+              <p className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-brand">
                 Question {index + 1} of {pairs.length}
               </p>
-              <p className="mt-1 text-lg font-semibold text-balance text-gray-950 dark:text-white">
+              <h2 className="font-display text-2xl font-bold leading-tight text-text-primary">
                 {pair.question.text}
-              </p>
+              </h2>
             </div>
 
-            <div
-              className="rounded-2xl border border-border bg-surface-soft p-6 font-body text-base leading-relaxed text-text-primary"
-              aria-label="Answer transcript with filler highlights"
-            >
-              <HighlightedTranscript text={pair.answer.answer} />
-            </div>
+            <section className="space-y-4">
+              <h3 className="font-display text-lg font-semibold text-text-primary">
+                Your Answer
+              </h3>
+              <div
+                className="rounded-2xl border border-border bg-surface-soft p-6 font-body text-base leading-relaxed text-text-primary"
+                aria-label="Answer transcript with filler highlights"
+              >
+                <HighlightedTranscript text={pair.answer.answer} />
+              </div>
+            </section>
 
             <SpeechAnalyticsSection
               analytics={pair.answer.delivery_analytics}
@@ -84,15 +93,12 @@ export function SessionSummary({ sessionCreatedAt, pairs }: SessionSummaryProps)
               feedbackRaw={pair.answer.feedback}
               answerId={pair.answer.id}
             />
-          </article>
+          </section>
         ))}
       </div>
 
-      <div>
-        <Link
-          href="/"
-          className="inline-block rounded bg-white px-4 py-2 text-black hover:bg-gray-200 dark:bg-gray-200"
-        >
+      <div className="mt-16 flex justify-center">
+        <Link href="/" className={gradientButtonClassName('large')}>
           Exit to Home
         </Link>
       </div>

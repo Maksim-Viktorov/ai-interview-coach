@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { AuthHeader } from '@/components/auth/header';
 import { SessionSummary } from '@/components/interview/session-summary';
+import { gradientButtonClassName } from '@/components/ui/gradient-button';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import {
   buildSessionSummaryPairs,
@@ -13,6 +14,35 @@ type SessionRow = {
   created_at: string;
   question_ids?: string[] | null;
 };
+
+function SummaryErrorPage({
+  title,
+  description,
+  href,
+  linkLabel,
+}: {
+  title: string;
+  description: string;
+  href: string;
+  linkLabel: string;
+}) {
+  return (
+    <>
+      <AuthHeader />
+      <main className="flex flex-1 flex-col items-center px-6 pt-12 pb-20">
+        <div className="w-full max-w-2xl text-center">
+          <h1 className="mb-4 font-display text-3xl font-bold text-text-primary">
+            {title}
+          </h1>
+          <p className="mb-8 font-body text-text-secondary">{description}</p>
+          <Link href={href} className={gradientButtonClassName('large')}>
+            {linkLabel}
+          </Link>
+        </div>
+      </main>
+    </>
+  );
+}
 
 export default async function SessionSummaryPage({
   params,
@@ -30,34 +60,30 @@ export default async function SessionSummaryPage({
 
   if (error || !session) {
     return (
-      <>
-        <AuthHeader />
-        <main className="p-8 space-y-4">
-          <p>Session not found</p>
-          <Link
-            href="/"
-            className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
-          >
-            Back to home
-          </Link>
-        </main>
-      </>
+      <SummaryErrorPage
+        title="Session not found"
+        description="We couldn't find this interview session."
+        href="/"
+        linkLabel="Back to Home"
+      />
     );
   }
 
   const s = session as SessionRow;
   const rawIds = s.question_ids;
   if (!Array.isArray(rawIds) || rawIds.length !== 3) {
+    console.error(
+      '[summary] invalid question_ids for session',
+      id,
+      rawIds,
+    );
     return (
-      <>
-        <AuthHeader />
-        <main className="p-8 space-y-4">
-          <p>This session is missing question data</p>
-          <Link href="/" className="underline">
-            Back to home
-          </Link>
-        </main>
-      </>
+      <SummaryErrorPage
+        title="Session data unavailable"
+        description="Something went wrong loading this session. Please try again or start a new interview."
+        href="/"
+        linkLabel="Back to Home"
+      />
     );
   }
 
@@ -77,16 +103,18 @@ export default async function SessionSummaryPage({
     .in('id', rawIds);
 
   if (qErr || !questionRows) {
+    console.error(
+      '[summary] failed to load questions for session',
+      id,
+      qErr,
+    );
     return (
-      <>
-        <AuthHeader />
-        <main className="p-8 space-y-4">
-          <p>This session is missing question data</p>
-          <Link href="/" className="underline">
-            Back to home
-          </Link>
-        </main>
-      </>
+      <SummaryErrorPage
+        title="Session data unavailable"
+        description="Something went wrong loading this session. Please try again or start a new interview."
+        href="/"
+        linkLabel="Back to Home"
+      />
     );
   }
 
@@ -96,16 +124,18 @@ export default async function SessionSummaryPage({
     .filter((q): q is QuestionRow => q != null);
 
   if (orderedQuestions.length !== 3) {
+    console.error(
+      '[summary] question count mismatch for session',
+      id,
+      { expected: 3, got: orderedQuestions.length, rawIds },
+    );
     return (
-      <>
-        <AuthHeader />
-        <main className="p-8 space-y-4">
-          <p>This session is missing question data</p>
-          <Link href="/" className="underline">
-            Back to home
-          </Link>
-        </main>
-      </>
+      <SummaryErrorPage
+        title="Session data unavailable"
+        description="Something went wrong loading this session. Please try again or start a new interview."
+        href="/"
+        linkLabel="Back to Home"
+      />
     );
   }
 
@@ -113,32 +143,25 @@ export default async function SessionSummaryPage({
 
   if (!pairs) {
     return (
-      <>
-        <AuthHeader />
-        <main className="p-8 space-y-4">
-          <p>This session isn&apos;t complete yet</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Finish all three questions before viewing the session summary.
-          </p>
-          <Link
-            href={`/interview/${id}`}
-            className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
-          >
-            Continue interview
-          </Link>
-        </main>
-      </>
+      <SummaryErrorPage
+        title="Session in progress"
+        description="This interview session hasn't been completed yet."
+        href={`/interview/${id}`}
+        linkLabel="Continue Interview"
+      />
     );
   }
 
   return (
     <>
       <AuthHeader />
-      <main className="mx-auto max-w-5xl p-8">
-        <SessionSummary
-          sessionCreatedAt={s.created_at}
-          pairs={pairs}
-        />
+      <main className="flex flex-1 flex-col items-center px-6 pt-12 pb-20">
+        <div className="w-full max-w-3xl">
+          <SessionSummary
+            sessionCreatedAt={s.created_at}
+            pairs={pairs}
+          />
+        </div>
       </main>
     </>
   );
