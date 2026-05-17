@@ -48,23 +48,24 @@ export default function Home() {
     <>
       <AuthHeader />
       <main className="flex flex-1 flex-col">
-        <div className="flex flex-1 items-center justify-center px-4">
+        <div className="flex flex-1 flex-col items-center px-4 pt-20 md:pt-32">
           <div className="flex max-w-2xl flex-col items-center">
-            <h1 className="text-center font-display text-5xl font-bold text-brand md:text-6xl">
+            <h1 className="animate-hero-title text-center font-display text-6xl font-bold text-brand md:text-7xl">
               Welcome to AI Interview Coach
             </h1>
-            <p className="mt-4 max-w-xl text-center font-body text-lg text-text-secondary">
+            <p className="animate-hero-subtitle mt-6 max-w-2xl text-center font-body text-xl text-text-secondary md:text-2xl">
               Practice behavioral interviews with delivery analytics
             </p>
 
-            <div className="mt-10 flex flex-wrap justify-center gap-4">
+            <div className="animate-hero-buttons mt-12 flex flex-wrap justify-center gap-4">
               <GradientButton
+                size="large"
                 onClick={() => void handleStartInterview()}
                 disabled={isCreating}
               >
                 {isCreating ? 'Creating session…' : 'Start Interview'}
               </GradientButton>
-              <Link href="/stats" className={gradientButtonClassName}>
+              <Link href="/stats" className={gradientButtonClassName('large')}>
                 View Stats
               </Link>
             </div>
