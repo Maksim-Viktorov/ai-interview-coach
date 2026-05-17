@@ -2,7 +2,6 @@
 
 import type { DeepgramAnalytics } from '@/lib/deepgram-analytics';
 import type { DimensionScorecard } from '@/lib/dimension-scoring';
-import { SpeakingPaceOverTimeChart } from '@/components/interview/speaking-pace-over-time-chart';
 import {
   DimensionScoreCard,
   pacingCurveDescriptor,
@@ -23,22 +22,14 @@ export function SpeechAnalyticsSection({
 
   const wpmFinite =
     analytics != null && Number.isFinite(analytics.speakingRateWpm);
-  const wpmHeadline = wpmFinite
-    ? `${Math.round(analytics!.speakingRateWpm)} WPM`
-    : '—';
+  const wpmValue = wpmFinite ? Math.round(analytics!.speakingRateWpm) : null;
 
   const pa = analytics?.consistency?.pacingAnalysis;
   const curve = pa != null ? pacingCurveDescriptor(pa.shape) : null;
-  const paceOverTimeData =
-    analytics?.consistency?.pacingWindows.map((p) => ({
-      time: p.midTime,
-      wpm: p.wpm,
-    })) ?? [];
-
   const dynamismFooter =
     curve == null ? null : (
-      <div className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-        <p className="font-medium text-gray-800 dark:text-gray-200">
+      <div className="font-body text-xs leading-relaxed text-text-secondary">
+        <p className="font-medium text-text-primary">
           Curve shape: {curve.label}
         </p>
         <p className="mt-0.5">{curve.helper}</p>
@@ -46,24 +37,24 @@ export function SpeechAnalyticsSection({
     );
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 shadow-sm dark:border-gray-600 dark:bg-gray-900/80">
-      <h3 className="text-base font-semibold tracking-tight text-gray-950 dark:text-white">
+    <section className="space-y-4">
+      <h3 className="font-display text-lg font-semibold text-text-primary">
         Speech Analytics
       </h3>
 
-      {analytics ? (
-        <div className="mt-4 flex flex-wrap items-baseline gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
-            Speaking rate
+      {wpmValue != null ? (
+        <div className="flex items-baseline gap-3">
+          <span className="font-display text-4xl font-bold tabular-nums text-text-primary">
+            {wpmValue}
           </span>
-          <span className="text-lg font-bold tabular-nums text-gray-950 dark:text-white">
-            {wpmHeadline}
+          <span className="font-body text-base text-text-secondary">
+            WPM
           </span>
         </div>
       ) : null}
 
       {scorecard ? (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <DimensionScoreCard title="Pace" dim={scorecard.pace} />
           <DimensionScoreCard title="Fluency" dim={scorecard.fluency} />
           <DimensionScoreCard title="Cleanliness" dim={scorecard.cleanliness} />
@@ -74,15 +65,9 @@ export function SpeechAnalyticsSection({
           />
         </div>
       ) : analytics ? (
-        <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+        <p className="font-body text-sm text-text-secondary">
           Delivery scorecard was not returned for this transcription.
         </p>
-      ) : null}
-
-      {analytics && paceOverTimeData.length > 0 ? (
-        <div className="mt-6">
-          <SpeakingPaceOverTimeChart data={paceOverTimeData} />
-        </div>
       ) : null}
     </section>
   );
