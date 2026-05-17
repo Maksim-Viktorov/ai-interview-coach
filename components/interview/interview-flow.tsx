@@ -76,7 +76,6 @@ export function InterviewFlow({
         sessionId={sessionId}
         question={currentQuestion}
         questionId={currentQuestionId!}
-        questionNumber={displayNumber}
         onSubmitted={() => setSubmittedCurrentQuestion(true)}
       />
 

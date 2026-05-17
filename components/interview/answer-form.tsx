@@ -6,6 +6,8 @@ import { CameraPreview } from '@/components/interview/camera-preview';
 import { EngagementSection } from '@/components/interview/engagement-section';
 import { CoachFeedbackSection } from '@/components/interview/coach-ui';
 import { SpeechAnalyticsSection } from '@/components/interview/speech-analytics-section';
+import { GradientButton } from '@/components/ui/gradient-button';
+import { OutlineButton } from '@/components/ui/outline-button';
 import {
   analyzePausesFromSamples,
   type PauseMetrics,
@@ -17,12 +19,10 @@ import {
   type GazeMetricsSnapshot,
 } from '@/hooks/useGazeTracking';
 
-
 type AnswerFormProps = {
   sessionId: string;
   question: string;
   questionId: string;
-  questionNumber: number;
   onSubmitted?: () => void;
 };
 
@@ -46,11 +46,47 @@ type MetricsState =
   | (TranscribeMetrics & Partial<PauseMetrics>)
   | PauseMetrics;
 
+type RecordingPanelState =
+  | 'idle'
+  | 'recording'
+  | 'stopped'
+  | 'transcribing'
+  | 'transcribed';
+
+function formatRecordingTime(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function deriveRecordingPanelState(
+  isRecording: boolean,
+  transcribing: boolean,
+  audioBlob: Blob | null,
+  analytics: DeepgramAnalytics | null,
+): RecordingPanelState {
+  if (isRecording) return 'recording';
+  if (transcribing) return 'transcribing';
+  if (audioBlob && analytics) return 'transcribed';
+  if (audioBlob && !analytics) return 'stopped';
+  return 'idle';
+}
+
+function ErrorAlert({ message }: { message: string }) {
+  return (
+    <div
+      className="rounded-xl border border-score-bad/30 bg-score-bad/5 px-4 py-3"
+      role="alert"
+    >
+      <p className="font-body text-sm text-score-bad">{message}</p>
+    </div>
+  );
+}
+
 export function AnswerForm({
   sessionId,
   question,
   questionId,
-  questionNumber,
   onSubmitted,
 }: AnswerFormProps) {
   const [answer, setAnswer] = useState('');
@@ -77,6 +113,7 @@ export function AnswerForm({
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedEngagement, setCapturedEngagement] =
     useState<GazeMetricsSnapshot | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const { state: gazeState, controls: gazeControls } = useGazeTracking();
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -86,16 +123,31 @@ export function AnswerForm({
   const audioUrlRef = useRef<string | null>(null);
   const feedbackRef = useRef<HTMLDivElement | null>(null);
   const hadFeedbackRef = useRef(false);
-  /** Latest pause analysis; merged into `metrics` after transcription completes. */
   const pauseMetricsRef = useRef<PauseMetrics | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
 
-  /** Keeps latest camera stream reference for recorder.onstop (stops tracks). */
+  const panelState = deriveRecordingPanelState(
+    isRecording,
+    transcribing,
+    audioBlob,
+    analytics,
+  );
+
+  const showTranscript =
+    analytics != null && feedback == null && !transcribing;
+
+  const canSubmit =
+    !submitting &&
+    !isRecording &&
+    !transcribing &&
+    analytics != null &&
+    coachScorecard != null;
+
   useEffect(() => {
     cameraStreamRef.current = cameraStream;
   }, [cameraStream]);
 
-  /** Start / stop gaze rAF tied to recording + preview stream. */
   useEffect(() => {
     if (!isRecording || !cameraStream) {
       return;
@@ -109,6 +161,24 @@ export function AnswerForm({
       gazeControls.stopTracking();
     };
   }, [isRecording, cameraStream, gazeControls]);
+
+  useEffect(() => {
+    if (!isRecording) {
+      recordingStartedAtRef.current = null;
+      setRecordingSeconds(0);
+      return;
+    }
+    recordingStartedAtRef.current = Date.now();
+    setRecordingSeconds(0);
+    const intervalId = window.setInterval(() => {
+      if (recordingStartedAtRef.current != null) {
+        setRecordingSeconds(
+          Math.floor((Date.now() - recordingStartedAtRef.current) / 1000),
+        );
+      }
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [isRecording]);
 
   const mergePauseIntoMetrics = (
     base: TranscribeMetrics | null,
@@ -185,7 +255,6 @@ export function AnswerForm({
 
   const startRecording = async () => {
     try {
-      // Clear prior attempt / submission so results + textarea never leak into a new recording.
       setFeedback(null);
       setAnswer('');
       setAnalytics(null);
@@ -407,95 +476,169 @@ export function AnswerForm({
     }
   };
 
-  return (
-    <section className="rounded border p-4 space-y-6">
-      <h2 className="text-xl font-semibold">
-        Question {questionNumber}
-      </h2>
-
-      <p>{question}</p>
-
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {!isRecording ? (
-            <button
-              type="button"
-              className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={() => void startRecording()}
-            >
+  const renderRecordingPanel = () => {
+    switch (panelState) {
+      case 'idle':
+        return (
+          <div className="flex flex-col items-center gap-4 text-center">
+            <GradientButton size="large" onClick={() => void startRecording()}>
               Start Recording
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={stopRecording}
-            >
+            </GradientButton>
+            <p className="font-body text-sm text-text-secondary">
+              Click to begin recording your answer
+            </p>
+            {cameraPermission === 'granted' ? (
+              <p className="font-body text-xs text-score-good">
+                Camera enabled
+              </p>
+            ) : null}
+            {cameraPermission === 'denied' ? (
+              <p className="font-body text-xs text-text-muted">
+                Camera disabled — engagement metrics unavailable
+              </p>
+            ) : null}
+          </div>
+        );
+
+      case 'recording':
+        return (
+          <div className="flex w-full flex-col items-center gap-6">
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex items-center gap-3">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 animate-pulse"
+                  aria-hidden
+                />
+                <span className="font-display text-2xl font-bold tabular-nums text-text-primary">
+                  {formatRecordingTime(recordingSeconds)}
+                </span>
+              </div>
+              <p className="font-body text-sm text-text-secondary">
+                Recording...
+              </p>
+            </div>
+            {cameraStream ? (
+              <CameraPreview
+                ref={cameraVideoRef}
+                stream={cameraStream}
+                isLookingAtCamera={gazeState.isLookingAtCamera}
+                isCalibrating={gazeState.isCalibrating}
+                isFaceDetected={gazeState.isFaceDetected}
+              />
+            ) : null}
+            <OutlineButton type="button" onClick={stopRecording}>
               Stop Recording
-            </button>
-          )}
-          {audioBlob ? (
-            <span className="text-sm text-green-700">Audio recorded</span>
-          ) : null}
-          <button
-            type="button"
-            className="rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!audioBlob || transcribing}
-            onClick={() => void handleTranscribe()}
-          >
-            {transcribing ? 'Transcribing...' : 'Transcribe Recording'}
-          </button>
-        </div>
-        {isRecording && cameraStream ? (
-          <CameraPreview
-            ref={cameraVideoRef}
-            stream={cameraStream}
-            isLookingAtCamera={gazeState.isLookingAtCamera}
-            isCalibrating={gazeState.isCalibrating}
-            isFaceDetected={gazeState.isFaceDetected}
-          />
-        ) : null}
+            </OutlineButton>
+          </div>
+        );
+
+      case 'stopped':
+        return (
+          <div className="flex w-full flex-col items-center gap-6">
+            <p className="font-display text-lg font-semibold text-text-primary">
+              Recording complete
+            </p>
+            {audioUrl ? (
+              <audio controls src={audioUrl} className="w-full rounded-lg" />
+            ) : null}
+            <div className="flex flex-wrap justify-center gap-3">
+              <GradientButton
+                type="button"
+                onClick={() => void handleTranscribe()}
+                disabled={!audioBlob || transcribing}
+              >
+                Transcribe
+              </GradientButton>
+              <OutlineButton type="button" onClick={() => void startRecording()}>
+                Re-record
+              </OutlineButton>
+            </div>
+          </div>
+        );
+
+      case 'transcribing':
+        return (
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div
+              className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-brand"
+              aria-hidden
+            />
+            <p className="font-body text-sm text-text-secondary">
+              Transcribing your audio...
+            </p>
+          </div>
+        );
+
+      case 'transcribed':
+        return (
+          <div className="flex w-full flex-col items-center gap-6">
+            <p className="font-display text-lg font-semibold text-text-primary">
+              Recording complete
+            </p>
+            {audioUrl ? (
+              <audio controls src={audioUrl} className="w-full rounded-lg" />
+            ) : null}
+            <OutlineButton type="button" onClick={() => void startRecording()}>
+              Re-record
+            </OutlineButton>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="w-full space-y-8">
+      <div className="rounded-2xl border border-border bg-surface-soft p-8">
+        {renderRecordingPanel()}
       </div>
 
-      {cameraPermission === 'denied' ? (
-        <p className="text-xs text-gray-600 dark:text-gray-400">
-          Camera unavailable — engagement is skipped. You can still record
-          audio.
-        </p>
-      ) : null}
+      {transcriptionError ? <ErrorAlert message={transcriptionError} /> : null}
 
-      {transcriptionError ? (
-        <p className="text-sm text-red-600" role="alert">
-          {transcriptionError}
-        </p>
-      ) : null}
-
-      {audioUrl ? (
-        <audio controls src={audioUrl} className="w-full" />
-      ) : null}
-
-      {!(feedback !== null && analytics !== null) ? (
-        <div className="space-y-2">
+      {showTranscript ? (
+        <div className="space-y-3">
+          <label
+            htmlFor="answer-transcript"
+            className="font-body text-sm font-semibold text-text-primary"
+          >
+            Your transcribed answer
+          </label>
           <textarea
-            className="min-h-32 w-full rounded border p-3"
+            id="answer-transcript"
+            className="w-full min-h-[200px] rounded-xl border border-border bg-surface px-5 py-4 font-body text-base leading-relaxed text-text-primary transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             placeholder="Your transcribed answer will appear here. You can edit it to fix mistranscriptions before submitting."
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             aria-label="Answer"
           />
-          {analytics !== null && !transcribing && feedback === null ? (
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Answer transcribed — review and click Submit to see your analytics
+          <p className="font-body text-sm text-text-secondary">
+            Edit any mistranscriptions before submitting. The original audio is
+            what gets scored for delivery.
+          </p>
+        </div>
+      ) : null}
+
+      {feedback == null ? (
+        <div className="pt-4">
+          <GradientButton
+            size="large"
+            className="w-full"
+            disabled={!canSubmit}
+            onClick={() => void handleSubmit()}
+          >
+            {submitting ? 'Submitting...' : 'Submit Answer'}
+          </GradientButton>
+          {!canSubmit && !submitting ? (
+            <p className="mt-2 text-center font-body text-sm text-text-secondary">
+              Record your answer to submit
             </p>
           ) : null}
         </div>
       ) : null}
 
-      {errorMessage ? (
-        <p className="text-sm text-red-600" role="alert">
-          {errorMessage}
-        </p>
-      ) : null}
+      {errorMessage ? <ErrorAlert message={errorMessage} /> : null}
 
       {feedback ? (
         <div ref={feedbackRef} className="space-y-6" role="status">
@@ -524,28 +667,6 @@ export function AnswerForm({
           />
         </div>
       ) : null}
-
-      <div className="space-y-2">
-        {analytics == null &&
-        !isRecording &&
-        !transcribing &&
-        !submitting &&
-        feedback == null ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Record your answer to submit
-          </p>
-        ) : null}
-        <button
-          type="button"
-          className="rounded bg-white px-4 py-2 text-black hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={
-            submitting || isRecording || transcribing || analytics == null
-          }
-          onClick={() => void handleSubmit()}
-        >
-          {submitting ? 'Submitting...' : 'Submit Answer'}
-        </button>
-      </div>
-    </section>
+    </div>
   );
 }

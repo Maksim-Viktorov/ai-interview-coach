@@ -28,25 +28,25 @@ export const CameraPreview = forwardRef<HTMLVideoElement, CameraPreviewProps>(
       }
     }, [stream, ref]);
 
-    let dotClass = 'bg-gray-400';
+    let dotClass = 'bg-text-muted';
     let statusLabel = 'No face';
     if (isCalibrating && isFaceDetected) {
-      dotClass = 'bg-blue-500';
+      dotClass = 'bg-brand';
       statusLabel = 'Calibrating…';
     } else if (!isFaceDetected) {
-      dotClass = 'bg-gray-400';
+      dotClass = 'bg-text-muted';
       statusLabel = 'No face';
     } else if (isLookingAtCamera === true) {
-      dotClass = 'bg-emerald-500';
+      dotClass = 'bg-score-good';
       statusLabel = 'On camera';
     } else if (isLookingAtCamera === false) {
-      dotClass = 'bg-amber-500';
+      dotClass = 'bg-score-mid';
       statusLabel = 'Look away';
     }
 
     return (
-      <div className="relative h-[135px] w-[180px] shrink-0 overflow-hidden rounded-lg border border-gray-300 bg-black shadow-md dark:border-gray-600">
-        <div className="h-full w-full scale-x-[-1]">
+      <div className="relative my-6 inline-block w-[240px] overflow-hidden rounded-2xl border border-border bg-surface">
+        <div className="h-[180px] w-full scale-x-[-1]">
           <video
             ref={ref}
             className="h-full w-full object-cover"
@@ -56,12 +56,14 @@ export const CameraPreview = forwardRef<HTMLVideoElement, CameraPreviewProps>(
             aria-hidden
           />
         </div>
-        <div className="pointer-events-none absolute bottom-1 left-1 right-1 flex items-center gap-1.5 rounded bg-black/55 px-1.5 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+        <div className="pointer-events-none absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-lg bg-surface/90 px-2.5 py-1.5 backdrop-blur-sm">
           <span
             className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`}
             aria-hidden
           />
-          <span className="truncate">{statusLabel}</span>
+          <span className="truncate font-body text-xs text-text-primary">
+            {statusLabel}
+          </span>
         </div>
       </div>
     );
