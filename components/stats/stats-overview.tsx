@@ -1,6 +1,5 @@
 'use client';
 
-import { CARD_SHELL_CLASS } from '@/components/interview/coach-ui';
 import type { StatsAggregates } from '@/lib/stats-aggregation';
 
 type StatsOverviewProps = {
@@ -33,7 +32,7 @@ export function StatsOverview({ aggregates }: StatsOverviewProps) {
       subtitle: 'across all sessions',
     },
     {
-      label: 'Avg Pace',
+      label: 'Pace',
       value:
         aggregates.avgPaceScore != null
           ? `${aggregates.avgPaceScore}/100`
@@ -41,7 +40,7 @@ export function StatsOverview({ aggregates }: StatsOverviewProps) {
       subtitle: 'across completed sessions',
     },
     {
-      label: 'Avg Engagement',
+      label: 'Engagement',
       value:
         aggregates.avgEngagement != null
           ? `${aggregates.avgEngagement}%`
@@ -51,16 +50,19 @@ export function StatsOverview({ aggregates }: StatsOverviewProps) {
   ] as const;
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div className="mb-16 grid grid-cols-2 gap-4 md:grid-cols-4">
       {cards.map((card) => (
-        <div key={card.label} className={CARD_SHELL_CLASS}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+        <div
+          key={card.label}
+          className="space-y-2 rounded-2xl border border-border bg-surface p-6 text-center"
+        >
+          <p className="font-display text-sm font-semibold uppercase tracking-wide text-text-secondary">
             {card.label}
           </p>
-          <p className="mt-2 text-3xl font-bold tabular-nums text-gray-950 dark:text-white">
+          <p className="bg-gradient-to-r from-brand-gradient-start to-brand-gradient-end bg-clip-text font-display text-3xl font-bold tabular-nums text-transparent">
             {card.value}
           </p>
-          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+          <p className="font-body text-sm text-text-secondary">
             {card.subtitle}
           </p>
         </div>

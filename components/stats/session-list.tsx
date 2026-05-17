@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { CARD_SHELL_CLASS } from '@/components/interview/coach-ui';
 import type { SessionRow } from '@/lib/stats-aggregation';
 
 type SessionListProps = {
@@ -25,8 +24,8 @@ function statusLine(session: SessionRow): string {
 
 export function SessionList({ sessions }: SessionListProps) {
   return (
-    <section className="space-y-4">
-      <h2 className="text-xl font-semibold text-gray-950 dark:text-white">
+    <section>
+      <h2 className="mb-6 font-display text-lg font-semibold text-text-primary">
         Past Sessions
       </h2>
       <ul className="space-y-3">
@@ -39,18 +38,18 @@ export function SessionList({ sessions }: SessionListProps) {
             <li key={session.id}>
               <Link
                 href={href}
-                className={`${CARD_SHELL_CLASS} block transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/60`}
+                className="block rounded-2xl border border-border bg-surface p-5 transition-colors hover:bg-surface-soft"
               >
                 <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-950 dark:text-white">
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-display text-base font-semibold text-text-primary">
                       {formatSessionDate(session.createdAt)}
                     </p>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    <p className="font-body text-sm text-text-secondary">
                       {statusLine(session)}
                     </p>
                   </div>
-                  <span className="shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <span className="whitespace-nowrap font-display text-sm font-semibold text-brand">
                     {session.isComplete ? 'View →' : 'Resume →'}
                   </span>
                 </div>

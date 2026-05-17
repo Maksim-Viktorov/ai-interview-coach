@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { AuthHeader } from '@/components/auth/header';
 import { SessionList } from '@/components/stats/session-list';
 import { StatsOverview } from '@/components/stats/stats-overview';
+import { gradientButtonClassName } from '@/components/ui/gradient-button';
 import {
   computeAggregates,
   deriveSessionRows,
@@ -30,19 +31,22 @@ export default async function StatsPage() {
   ]);
 
   if (sessionsError || answersError) {
+    console.error('[stats] failed to load data', sessionsError, answersError);
     return (
       <>
         <AuthHeader />
-        <main className="mx-auto max-w-5xl space-y-4 p-8">
-          <p className="text-red-600" role="alert">
-            Could not load your stats. Please try again.
-          </p>
-          <Link
-            href="/"
-            className="inline-block rounded border border-gray-500 px-4 py-2 text-white hover:bg-gray-800"
-          >
-            Back to home
-          </Link>
+        <main className="flex flex-1 flex-col items-center px-6 pt-12 pb-20">
+          <div className="w-full max-w-2xl text-center">
+            <h1 className="mb-4 font-display text-3xl font-bold text-text-primary">
+              Could not load stats
+            </h1>
+            <p className="mb-8 font-body text-text-secondary">
+              Something went wrong loading your stats. Please try again.
+            </p>
+            <Link href="/" className={gradientButtonClassName('large')}>
+              Back to Home
+            </Link>
+          </div>
         </main>
       </>
     );
@@ -57,20 +61,21 @@ export default async function StatsPage() {
     return (
       <>
         <AuthHeader />
-        <main className="mx-auto max-w-5xl p-8">
-          <div className="space-y-4 py-16 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
-              No sessions yet
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Practice an interview to start seeing your stats.
-            </p>
-            <Link
-              href="/"
-              className="inline-block rounded bg-white px-4 py-2 text-black hover:bg-gray-200 dark:bg-gray-200"
-            >
-              Start an Interview
-            </Link>
+        <main className="flex flex-1 flex-col items-center px-6 pt-12 pb-20">
+          <div className="w-full max-w-3xl">
+            <div className="space-y-6 py-16 text-center">
+              <div className="space-y-3">
+                <h1 className="font-display text-4xl font-bold text-text-primary">
+                  No sessions yet
+                </h1>
+                <p className="mx-auto max-w-md font-body text-base text-text-secondary">
+                  Practice an interview to start seeing your stats and trends.
+                </p>
+              </div>
+              <Link href="/" className={gradientButtonClassName('large')}>
+                Start an Interview
+              </Link>
+            </div>
           </div>
         </main>
       </>
@@ -80,15 +85,20 @@ export default async function StatsPage() {
   return (
     <>
       <AuthHeader />
-      <main className="mx-auto max-w-5xl space-y-8 p-8">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
-            Practice Stats
-          </h1>
-        </header>
+      <main className="flex flex-1 flex-col items-center px-6 pt-12 pb-20">
+        <div className="w-full max-w-3xl">
+          <div className="mb-12 text-center">
+            <h1 className="mb-3 bg-gradient-to-r from-brand-gradient-start to-brand-gradient-end bg-clip-text font-display text-4xl font-bold text-transparent md:text-5xl">
+              Your Stats
+            </h1>
+            <p className="font-body text-base text-text-secondary">
+              Practice history and delivery trends
+            </p>
+          </div>
 
-        <StatsOverview aggregates={aggregates} />
-        <SessionList sessions={derivedSessions} />
+          <StatsOverview aggregates={aggregates} />
+          <SessionList sessions={derivedSessions} />
+        </div>
       </main>
     </>
   );
