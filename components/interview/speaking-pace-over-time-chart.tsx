@@ -24,6 +24,13 @@ function chooseTickInterval(maxSeconds: number): number {
   return 60;
 }
 
+function chooseWpmTickStep(range: number): number {
+  if (range <= 50) return 10;
+  if (range <= 100) return 20;
+  if (range <= 200) return 50;
+  return 100;
+}
+
 type SpeakingPaceOverTimeChartProps = {
   pacingWindows: PacingWindowPoint[];
 };
@@ -39,9 +46,14 @@ export function SpeakingPaceOverTimeChart({
   const wpmVals = sorted.map((d) => d.wpm);
   const minWpm = Math.min(...wpmVals, IDEAL_PACE_WPM_MIN);
   const maxWpm = Math.max(...wpmVals, IDEAL_PACE_WPM_MAX);
-  const pad = Math.max(12, (maxWpm - minWpm) * 0.1);
-  const yMin = Math.max(0, Math.floor(minWpm - pad));
-  const yMax = Math.ceil(maxWpm + pad);
+  const yMin = Math.max(0, Math.floor(minWpm / 10) * 10);
+  const yMax = Math.ceil(maxWpm / 10) * 10;
+  const yRange = yMax - yMin;
+  const yStep = chooseWpmTickStep(yRange);
+  const yTicks: number[] = [];
+  for (let v = yMin; v <= yMax; v += yStep) {
+    yTicks.push(v);
+  }
 
   const maxSeconds = Math.max(...sorted.map((w) => w.midTime));
   const tickInterval = chooseTickInterval(maxSeconds);
@@ -82,6 +94,7 @@ export function SpeakingPaceOverTimeChart({
           />
           <YAxis
             domain={[yMin, yMax]}
+            ticks={yTicks}
             tick={{ fontSize: 11, fill: colors.textSecondary }}
             stroke={colors.textSecondary}
             width={48}
